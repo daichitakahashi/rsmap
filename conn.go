@@ -3,6 +3,7 @@ package rsmap
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lestrrat-go/backoff/v2"
 	"go.etcd.io/bbolt"
 )
@@ -54,12 +56,30 @@ func writeAddr(addr string) error {
 func request(addr string) error {
 	var c http.Client
 	c.Timeout = time.Millisecond * 50
-	resp, err := c.Get("http://" + addr)
+
+	req := acquireRequest{
+		ClientID: uuid.NewString(),
+		ID:       uuid.NewString(),
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.Post("http://"+addr, "application/json", bytes.NewReader(data))
 	if err != nil {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+	var res acquireResponse
+	err = json.NewDecoder(resp.Body).Decode(&res)
+	if err != nil {
+		return err
+	}
+	if res.ID != req.ID {
+		return errors.New("unexpected id")
 	}
 	return nil
 }
@@ -85,7 +105,15 @@ func newServer() (_ func(), err error) {
 	var s http.Server
 	m := http.NewServeMux()
 	m.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		var req acquireRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		json.NewEncoder(w).Encode(acquireResponse{
+			ID: req.ID,
+		})
 	}))
 	s.Handler = m
 	go func() {
@@ -102,4 +130,13 @@ func newServer() (_ func(), err error) {
 		_ = db.Close()
 		_ = s.Close()
 	}, nil
+}
+
+type acquireRequest struct {
+	ClientID string `json:"clientId"`
+	ID       string `json:"id"`
+}
+
+type acquireResponse struct {
+	ID string `json:"id"`
 }
