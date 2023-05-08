@@ -24,41 +24,40 @@ type (
 )
 
 func (c *serverCore) startInit(ctx context.Context, resourceName string, max int64) (initStatus, error) {
-	var initCh chan bool
-	for {
-		var status initStatus
-		err := c.db.Update(func(tx *bbolt.Tx) error {
-			r, ok := c.resources[resourceName]
-			if !ok {
-				initCh = make(chan bool)
-				r = &resource{
-					init:     initCh,
-					sem:      semaphore.NewWeighted(max),
-					channels: map[string]<-chan bool{},
-				}
-				c.resources[resourceName] = r
-			} else if initCh == nil {
-				initCh = r.init
+	var (
+		r      *resource
+		status initStatus
+	)
+	err := c.db.Update(func(tx *bbolt.Tx) error {
+		var ok bool
+		r, ok = c.resources[resourceName]
+		if !ok {
+			r = &resource{
+				init:     make(chan bool),
+				sem:      semaphore.NewWeighted(max),
+				channels: map[string]<-chan bool{},
 			}
-			status = r.logs.tryInit(tx, time.Now(), max)
-
-			return nil
-		})
-		if err != nil {
-			return "", err
+			c.resources[resourceName] = r
 		}
+		status = r.logs.tryInit(tx, time.Now(), max)
 
-		switch status {
-		case statusProcessing:
-			select {
-			case <-ctx.Done():
-				return "", ctx.Err()
-			case <-initCh:
-				continue
-			}
-		default:
-			return status, nil
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+
+	switch status {
+	case statusProcessing:
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		case <-r.init:
+			st, _ := r.logs.initResult()
+			return st, nil
 		}
+	default:
+		return status, nil
 	}
 }
 

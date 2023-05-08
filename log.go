@@ -118,6 +118,20 @@ func (l *logs) failInit(tx *bbolt.Tx, ts time.Time) error {
 	return nil
 }
 
+func (l *logs) initResult() (initStatus, bool) {
+	if ln := len(l.initLogs); ln > 0 {
+		switch l.initLogs[ln-1].op {
+		case opStart:
+			return statusStarted, true
+		case opComplete:
+			return statusCompleted, true
+		case opFail:
+			return statusFailed, true
+		}
+	}
+	return "", false
+}
+
 type acquireLog struct {
 	op     acquireOp
 	ts     time.Time
