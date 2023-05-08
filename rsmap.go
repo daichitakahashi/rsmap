@@ -40,6 +40,7 @@ func (r *ResourceMap) SetResource(ctx context.Context, name string, init func(co
 		data, err := init(ctx)
 		if err != nil {
 			err = errors.Join(
+				err,
 				r.failInit(ctx, name),
 			)
 			return fmt.Errorf("error on init func: %w", err)
