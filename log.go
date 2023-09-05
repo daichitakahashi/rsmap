@@ -3,13 +3,12 @@ package rsmap
 import (
 	"context"
 	"errors"
-	"time"
+	"sync"
 
 	"golang.org/x/sync/semaphore"
 )
 
 // TODO
-// * persistence
 // * status for init failure
 // * timeout for init and acquisition
 
@@ -89,7 +88,7 @@ type (
 	initLog struct {
 		Event     initEvent `json:"event"`
 		Operator  string    `json:"operator"`
-		Timestamp time.Time `json:"ts"`
+		Timestamp int64     `json:"ts,string"`
 	}
 )
 
@@ -97,24 +96,55 @@ type (
 type acquireCtl struct {
 	sem      *semaphore.Weighted
 	max      int64
+	m        sync.Mutex
 	acquired map[string]int64
 }
 
 func newAcquireCtl(max int64, acquired map[string]int64) *acquireCtl {
+	sem := semaphore.NewWeighted(max)
+	// Replay acquisitions.
+	for _, n := range acquired {
+		_ = sem.Acquire(context.Background(), n)
+	}
+
 	return &acquireCtl{
-		sem:      semaphore.NewWeighted(max),
+		sem:      sem,
 		max:      max,
 		acquired: acquired,
 	}
 }
 
 // Acquire exclusive/shared lock.
-func (c *acquireCtl) acquire(ctx context.Context, exclusive bool) error {
+func (c *acquireCtl) acquire(ctx context.Context, operator string, exclusive bool) (int64, error) {
+	c.m.Lock()
+	defer c.m.Unlock()
+	if _, ok := c.acquired[operator]; ok {
+		// If already acquired by this operator, return 0.
+		return 0, nil
+	}
+
 	n := int64(1)
 	if exclusive {
 		n = c.max
 	}
-	return c.sem.Acquire(ctx, n)
+	if err := c.sem.Acquire(ctx, n); err != nil {
+		return 0, err
+	}
+
+	// Record acquired operator.
+	c.acquired[operator] = n
+	return n, nil
+}
+
+func (c *acquireCtl) release(operator string) {
+	c.m.Lock()
+	defer c.m.Unlock()
+	n, ok := c.acquired[operator]
+	if !ok {
+		// If not acquired, return without error.
+		return
+	}
+	c.sem.Release(n)
 }
 
 type acquireEvent string
@@ -134,7 +164,7 @@ type (
 		Event     acquireEvent `json:"event"`
 		N         int64        `json:"n"`
 		Operator  string       `json:"operator"`
-		Timestamp time.Time    `json:"ts"`
+		Timestamp int64        `json:"ts,string"`
 	}
 )
 
