@@ -1,185 +1,175 @@
 package rsmap
 
-import (
-	"context"
-	"errors"
-	"time"
+// type (
+// 	serverCore struct {
+// 		db        *bbolt.DB
+// 		resources map[string]*resource
+// 	}
+// 	resource struct {
+// 		init     chan bool
+// 		sem      *semaphore.Weighted
+// 		logs     logs
+// 		channels map[string]<-chan bool
+// 	}
+// )
 
-	"github.com/google/uuid"
-	"go.etcd.io/bbolt"
-	"golang.org/x/sync/semaphore"
-)
+// func (c *serverCore) startInit(ctx context.Context, resourceName string, max int64) (initStatus, error) {
+// 	var (
+// 		r      *resource
+// 		status initStatus
+// 	)
+// 	err := c.db.Update(func(tx *bbolt.Tx) error {
+// 		var ok bool
+// 		r, ok = c.resources[resourceName]
+// 		if !ok {
+// 			r = &resource{
+// 				init:     make(chan bool),
+// 				sem:      semaphore.NewWeighted(max),
+// 				channels: map[string]<-chan bool{},
+// 			}
+// 			c.resources[resourceName] = r
+// 		}
+// 		status = r.logs.tryInit(tx, time.Now(), max)
 
-type (
-	serverCore struct {
-		db        *bbolt.DB
-		resources map[string]*resource
-	}
-	resource struct {
-		init     chan bool
-		sem      *semaphore.Weighted
-		logs     logs
-		channels map[string]<-chan bool
-	}
-)
+// 		return nil
+// 	})
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-func (c *serverCore) startInit(ctx context.Context, resourceName string, max int64) (initStatus, error) {
-	var (
-		r      *resource
-		status initStatus
-	)
-	err := c.db.Update(func(tx *bbolt.Tx) error {
-		var ok bool
-		r, ok = c.resources[resourceName]
-		if !ok {
-			r = &resource{
-				init:     make(chan bool),
-				sem:      semaphore.NewWeighted(max),
-				channels: map[string]<-chan bool{},
-			}
-			c.resources[resourceName] = r
-		}
-		status = r.logs.tryInit(tx, time.Now(), max)
+// 	switch status {
+// 	case statusProcessing:
+// 		select {
+// 		case <-ctx.Done():
+// 			return "", ctx.Err()
+// 		case <-r.init:
+// 			st, _ := r.logs.initResult()
+// 			return st, nil
+// 		}
+// 	default:
+// 		return status, nil
+// 	}
+// }
 
-		return nil
-	})
-	if err != nil {
-		return "", err
-	}
+// func (c *serverCore) completeInit(ctx context.Context, resourceName string, data any) error {
+// 	err := c.db.Update(func(tx *bbolt.Tx) error {
+// 		r, ok := c.resources[resourceName]
+// 		if !ok {
+// 			return errors.New("resource is not initialized")
+// 		}
+// 		err := r.logs.completeInit(tx, data, time.Now())
+// 		if err != nil {
+// 			return err
+// 		}
+// 		close(r.init)
+// 		return nil
+// 	})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
 
-	switch status {
-	case statusProcessing:
-		select {
-		case <-ctx.Done():
-			return "", ctx.Err()
-		case <-r.init:
-			st, _ := r.logs.initResult()
-			return st, nil
-		}
-	default:
-		return status, nil
-	}
-}
+// func (c *serverCore) failInit(ctx context.Context, resourceName string) error {
+// 	err := c.db.Update(func(tx *bbolt.Tx) error {
+// 		r, ok := c.resources[resourceName]
+// 		if !ok {
+// 			return errors.New("resource is not initialized")
+// 		}
+// 		err := r.logs.failInit(tx, time.Now())
+// 		if err != nil {
+// 			return err
+// 		}
+// 		close(r.init)
+// 		return nil
+// 	})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
 
-func (c *serverCore) completeInit(ctx context.Context, resourceName string, data any) error {
-	err := c.db.Update(func(tx *bbolt.Tx) error {
-		r, ok := c.resources[resourceName]
-		if !ok {
-			return errors.New("resource is not initialized")
-		}
-		err := r.logs.completeInit(tx, data, time.Now())
-		if err != nil {
-			return err
-		}
-		close(r.init)
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return nil
-}
+// func (c *serverCore) acquire(ctx context.Context, resourceName, acquisitionID string, exclusive bool, v any) error {
+// 	var st acquireStatus
+// 	var acquired <-chan bool
 
-func (c *serverCore) failInit(ctx context.Context, resourceName string) error {
-	err := c.db.Update(func(tx *bbolt.Tx) error {
-		r, ok := c.resources[resourceName]
-		if !ok {
-			return errors.New("resource is not initialized")
-		}
-		err := r.logs.failInit(tx, time.Now())
-		if err != nil {
-			return err
-		}
-		close(r.init)
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	return nil
-}
+// 	err := c.db.Update(func(tx *bbolt.Tx) error {
+// 		r, ok := c.resources[resourceName]
+// 		if !ok {
+// 			return errors.New("resource is not initialized")
+// 		}
 
-func (c *serverCore) acquire(ctx context.Context, resourceName, acquisitionID string, exclusive bool, v any) error {
-	var st acquireStatus
-	var acquired <-chan bool
+// 		weight := int64(1)
+// 		if exclusive {
+// 			weight = r.logs.info.max
+// 		}
 
-	err := c.db.Update(func(tx *bbolt.Tx) error {
-		r, ok := c.resources[resourceName]
-		if !ok {
-			return errors.New("resource is not initialized")
-		}
+// 		id := uuid.NewString()
+// 		var err error
+// 		st, err = r.logs.acquire(tx, id, weight, time.Now())
+// 		if err != nil {
+// 			return err
+// 		}
+// 		switch st {
+// 		case statusRequested:
+// 			ch := make(chan bool)
+// 			r.channels[acquisitionID] = ch
+// 			acquired = ch
 
-		weight := int64(1)
-		if exclusive {
-			weight = r.logs.info.max
-		}
+// 			// perform acquire
+// 			go func() {
+// 				_ = r.sem.Acquire(context.Background(), weight)
+// 				_ = c.db.Update(func(tx *bbolt.Tx) error {
+// 					_ = r.logs.completeAcquire(tx, acquisitionID, time.Now())
+// 					close(ch)
+// 					return nil
+// 				})
+// 				delete(r.channels, acquisitionID)
+// 			}()
+// 		case statusAcquiring:
+// 			acquired = r.channels[acquisitionID]
 
-		id := uuid.NewString()
-		var err error
-		st, err = r.logs.acquire(tx, id, weight, time.Now())
-		if err != nil {
-			return err
-		}
-		switch st {
-		case statusRequested:
-			ch := make(chan bool)
-			r.channels[acquisitionID] = ch
-			acquired = ch
+// 		case statusAcquired:
+// 		}
+// 		return nil
+// 	})
+// 	if err != nil {
+// 		return err
+// 	}
 
-			// perform acquire
-			go func() {
-				_ = r.sem.Acquire(context.Background(), weight)
-				_ = c.db.Update(func(tx *bbolt.Tx) error {
-					_ = r.logs.completeAcquire(tx, acquisitionID, time.Now())
-					close(ch)
-					return nil
-				})
-				delete(r.channels, acquisitionID)
-			}()
-		case statusAcquiring:
-			acquired = r.channels[acquisitionID]
+// 	if st == statusAcquired {
+// 		return nil // already acquired
+// 	}
 
-		case statusAcquired:
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
+// 	// wait for acquire
+// 	select {
+// 	case <-ctx.Done():
+// 		return ctx.Err()
+// 	case <-acquired:
+// 		return nil
+// 	}
+// }
 
-	if st == statusAcquired {
-		return nil // already acquired
-	}
+// func (c *serverCore) useExclusive(ctx context.Context, resourceName string, acquisitionID string, v any) error {
+// 	return c.acquire(ctx, resourceName, acquisitionID, true, v)
+// }
 
-	// wait for acquire
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-acquired:
-		return nil
-	}
-}
+// func (c *serverCore) useShared(ctx context.Context, resourceName string, acquisitionID string, v any) error {
+// 	return c.acquire(ctx, resourceName, acquisitionID, false, v)
+// }
 
-func (c *serverCore) useExclusive(ctx context.Context, resourceName string, acquisitionID string, v any) error {
-	return c.acquire(ctx, resourceName, acquisitionID, true, v)
-}
+// func (c *serverCore) release(ctx context.Context, resourceName string, acquisitionID string) error {
+// 	err := c.db.Update(func(tx *bbolt.Tx) error {
+// 		r, ok := c.resources[resourceName]
+// 		if !ok {
+// 			return errors.New("resource is not initialized")
+// 		}
+// 		return r.logs.release(tx, acquisitionID)
+// 	})
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
 
-func (c *serverCore) useShared(ctx context.Context, resourceName string, acquisitionID string, v any) error {
-	return c.acquire(ctx, resourceName, acquisitionID, false, v)
-}
-
-func (c *serverCore) release(ctx context.Context, resourceName string, acquisitionID string) error {
-	err := c.db.Update(func(tx *bbolt.Tx) error {
-		r, ok := c.resources[resourceName]
-		if !ok {
-			return errors.New("resource is not initialized")
-		}
-		return r.logs.release(tx, acquisitionID)
-	})
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-var _ core = (*serverCore)(nil)
+// var _ core = (*serverCore)(nil)

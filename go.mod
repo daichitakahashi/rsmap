@@ -13,5 +13,6 @@ require (
 require (
 	github.com/google/go-cmp v0.5.5 // indirect
 	github.com/lestrrat-go/option v1.0.1 // indirect
+	github.com/stretchr/testify v1.8.4 // indirect
 	golang.org/x/sys v0.12.0 // indirect
 )
