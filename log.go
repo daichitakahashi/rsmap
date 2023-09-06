@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"golang.org/x/sync/semaphore"
 )
@@ -81,6 +82,18 @@ const (
 )
 
 type (
+	keyValueStore[T any] interface {
+		get(name string) (*T, error)
+		set(name string, obj *T) error
+		forEach(fn func(name string, obj *T) error) error
+	}
+
+	// Control init status and persistence.
+	initController struct {
+		_kv        keyValueStore[initRecord]
+		_resources sync.Map
+	}
+
 	initRecord struct {
 		Logs []initLog `json:"logs"`
 	}
@@ -91,6 +104,90 @@ type (
 		Timestamp int64     `json:"ts,string"`
 	}
 )
+
+func loadInitController(store keyValueStore[initRecord]) *initController {
+	c := &initController{
+		_kv: store,
+	}
+	_ = c._kv.forEach(func(name string, obj *initRecord) error {
+		// Get init status and operator.
+		completed, operator := func() (bool, string) {
+			if len(obj.Logs) == 0 {
+				return false, "" // Basically, it's impossible path.
+			}
+			last := obj.Logs[len(obj.Logs)-1]
+			return last.Event == initEventCompleted, last.Operator
+		}()
+
+		ctl := newInitCtl(completed)
+		if !completed {
+			_ = ctl.tryInit(
+				context.Background(),
+				operator,
+				func(try bool) error { return nil },
+			)
+		}
+		c._resources.Store(name, ctl)
+		return nil
+	})
+	return c
+}
+
+func (c *initController) tryInit(ctx context.Context, resourceName, operator string) (try bool, _ error) {
+	v, _ := c._resources.LoadOrStore(resourceName, newInitCtl(false))
+	ctl := v.(*initCtl)
+
+	// If the operator acquires lock for init but the fact is not recognized by operator,
+	// give a second chance to do init.
+	if !ctl._completed && ctl._operator == operator {
+		return true, nil
+	}
+
+	err := ctl.tryInit(ctx, operator, func(_try bool) error {
+		try = _try
+		if !try {
+			return nil
+		}
+
+		// Update data on key value store.
+		r, err := c._kv.get(resourceName)
+		if err != nil {
+			return err
+		}
+		r.Logs = append(r.Logs, initLog{
+			Event:     initEventStarted,
+			Operator:  operator,
+			Timestamp: time.Now().UnixNano(),
+		})
+		return c._kv.set(resourceName, r)
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return try, nil
+}
+
+func (c *initController) complete(resourceName, operator string) error {
+	v, found := c._resources.Load(resourceName)
+	if !found {
+		return errors.New("resource not found")
+	}
+	ctl := v.(*initCtl)
+
+	return ctl.complete(operator, func() error {
+		r, err := c._kv.get(resourceName)
+		if err != nil {
+			return err
+		}
+		r.Logs = append(r.Logs, initLog{
+			Event:     initEventCompleted,
+			Operator:  operator,
+			Timestamp: time.Now().UnixNano(),
+		})
+		return c._kv.set(resourceName, r)
+	})
+}
 
 // Primitive for controlling acquisition status.
 type acquireCtl struct {
