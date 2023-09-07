@@ -148,13 +148,13 @@ type (
 	}
 
 	acquireRecord struct {
-		Max  int64        `json:"max"`
+		Max  int64        `json:"max,string"`
 		Logs []acquireLog `json:"logs"`
 	}
 
 	acquireLog struct {
 		Event     acquireEvent `json:"event"`
-		N         int64        `json:"n,omitempty"`
+		N         int64        `json:"n,string,omitempty"`
 		Operator  string       `json:"operator"`
 		Timestamp int64        `json:"ts,string"`
 	}

@@ -1,81 +1,231 @@
 package rsmap
 
-// type (
-// 	ResourceMap struct {
-// 		core
-// 		resources sync.Map
-// 	}
+import (
+	"context"
+	"encoding/json"
 
-// 	ReleaseFunc func() error
+	"github.com/google/uuid"
+	"github.com/lestrrat-go/option"
+	"go.etcd.io/bbolt"
+)
 
-// 	core interface {
-// 		startInit(ctx context.Context, resourceName string, max int64) (initStatus, error)
-// 		completeInit(ctx context.Context, resourceName string, data any) error
-// 		failInit(ctx context.Context, resourceName string) error
-// 		useExclusive(ctx context.Context, resourceName, acquisitionID string, v any) error
-// 		useShared(ctx context.Context, resourceName, acquisitionID string, v any) error
-// 		release(ctx context.Context, resourceName, acquisitionID string) error
-// 	}
-// )
+type (
+	// Map is the controller for external resource usage.
+	Map struct {
+		_clientID string
+		_rm       resourceMap
+	}
 
-// func (r *ResourceMap) SetResource(ctx context.Context, name string, init func(context.Context) (any, error)) error {
-// 	const max = 999999999 // TODO: make it option
+	// Resource brings an ability of acquire/release lock for the dedicated resource.
+	Resource struct {
+		_m *Map
+		_n int64
+	}
+)
 
-// 	status, err := r.startInit(ctx, name, max)
-// 	if err != nil {
-// 		return err
-// 	}
+// Create Map for server side.
+// This Map reads and updates bbolt.DB directly.
+func newServerSideMap(db *bbolt.DB) (*Map, error) {
+	initRecordStore, err := newRecordStore[initRecord](db)
+	if err != nil {
+		return nil, err
+	}
+	acquireRecordStore, err := newRecordStore[acquireRecord](db)
+	if err != nil {
+		return nil, err
+	}
 
-// 	switch status {
-// 	case statusStarted:
-// 		data, err := init(ctx)
-// 		if err != nil {
-// 			err = errors.Join(
-// 				err,
-// 				r.failInit(ctx, name),
-// 			)
-// 			return fmt.Errorf("error on init func: %w", err)
-// 		}
-// 		err = r.completeInit(ctx, name, data)
-// 		if err != nil {
-// 			return err
-// 		}
-// 	case statusFailed:
-// 		return errors.New("resource is not initialized correctly")
-// 	case statusCompleted:
-// 	}
+	init, err := loadInitController(initRecordStore)
+	if err != nil {
+		return nil, err
+	}
+	acquire, err := loadAcquireController(acquireRecordStore)
+	if err != nil {
+		return nil, err
+	}
 
-// 	r.resources.Store(name, true)
+	return &Map{
+		_clientID: uuid.NewString(),
+		_rm: &serverSideMap{
+			_init:    init,
+			_acquire: acquire,
+		},
+	}, nil
+}
 
-// 	return nil
-// }
+type (
+	// ResourceOption represents option for [(*Map).Resource]
+	ResourceOption struct {
+		option.Interface
+	}
+	identOptionParallelism struct{}
+	identOptionInit        struct{}
+)
 
-// func (r *ResourceMap) UseExclusive(ctx context.Context, resourceName string, v any) (ReleaseFunc, error) {
-// 	if _, ok := r.resources.Load(resourceName); !ok {
-// 		return nil, errors.New("resource is not set")
-// 	}
+// WithParallelism can specify max parallelism.
+// Default value is 5.
+func WithParallelism(n int64) *ResourceOption {
+	return &ResourceOption{
+		Interface: option.New(identOptionParallelism{}, n),
+	}
+}
 
-// 	id := uuid.NewString()
-// 	err := r.useExclusive(ctx, resourceName, id, v)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return func() error {
-// 		return r.release(context.Background(), resourceName, id)
-// 	}, nil
-// }
+// TODO: add error as a return value.
+type InitFunc func(ctx context.Context)
 
-// func (r *ResourceMap) UseShared(ctx context.Context, resourceName string, v any) (ReleaseFunc, error) {
-// 	if _, ok := r.resources.Load(resourceName); !ok {
-// 		return nil, errors.New("resource is not set")
-// 	}
+// WithInit specifies InitFunc for resource initialization.
+//
+// InitFunc will be called only once globally, at first declaration by [(*Map).Resource].
+// Other process waits until the completion of this initialization.
+// So, if Resource is called without this option, we cannot perform initializations with concurrency safety.
+func WithInit(init InitFunc) *ResourceOption {
+	return &ResourceOption{
+		Interface: option.New(identOptionInit{}, init),
+	}
+}
 
-// 	id := uuid.NewString()
-// 	err := r.useShared(ctx, resourceName, id, v)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-// 	return func() error {
-// 		return r.release(context.Background(), resourceName, id)
-// 	}, nil
-// }
+// Resource creates [Resource] object that provides control for resource usage.
+func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption) (*Resource, error) {
+	var (
+		n    = int64(5)
+		init InitFunc
+	)
+
+	// Check options.
+	for _, opt := range opts {
+		switch opt.Ident() {
+		case identOptionParallelism{}:
+			n = opt.Value().(int64)
+		case identOptionInit{}:
+			init = opt.Value().(InitFunc)
+		}
+	}
+
+	try, err := m._rm.tryInit(ctx, name, m._clientID)
+	if err != nil {
+		return nil, err
+	}
+	if try {
+		if init != nil {
+			// Initialization of the resource.
+			init(ctx)
+
+			// TODO: error handling.
+
+			err = m._rm.completeInit(ctx, name, m._clientID)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return &Resource{
+		_m: m,
+		_n: n,
+	}, nil
+}
+
+// Core interface for control operations for both server and client side.
+type resourceMap interface {
+	tryInit(ctx context.Context, resourceName, operator string) (bool, error)
+	completeInit(ctx context.Context, resourceName, operator string) error
+	acquire(ctx context.Context, resourceName, operator string, max int64, exclusive bool) error
+	release(ctx context.Context, resourceName, operator string) error
+}
+
+type serverSideMap struct {
+	_init    *initController
+	_acquire *acquireController
+}
+
+func (m *serverSideMap) tryInit(ctx context.Context, resourceName, operator string) (bool, error) {
+	return m._init.tryInit(ctx, resourceName, operator)
+}
+
+func (m *serverSideMap) completeInit(_ context.Context, resourceName, operator string) error {
+	return m._init.complete(resourceName, operator)
+}
+
+func (m *serverSideMap) acquire(ctx context.Context, resourceName string, operator string, max int64, exclusive bool) error {
+	return m._acquire.acquire(ctx, resourceName, operator, max, exclusive)
+}
+
+func (m *serverSideMap) release(_ context.Context, resourceName, operator string) error {
+	return m._acquire.release(resourceName, operator)
+}
+
+var _ resourceMap = (*serverSideMap)(nil)
+
+// keyValueStore implementation for serverSideMap.
+type recordStore[T initRecord | acquireRecord] struct {
+	_bucketName []byte
+	_db         *bbolt.DB
+}
+
+func newRecordStore[T initRecord | acquireRecord](db *bbolt.DB) (*recordStore[T], error) {
+	var (
+		t          T
+		v          any = t
+		bucketName []byte
+	)
+	switch v.(type) {
+	case initRecord:
+		bucketName = []byte("init")
+	case acquireRecord:
+		bucketName = []byte("acquire")
+	}
+
+	err := db.Update(func(tx *bbolt.Tx) error {
+		// Create bucket for records.
+		_, err := tx.CreateBucketIfNotExists(bucketName)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &recordStore[T]{
+		_bucketName: bucketName,
+		_db:         db,
+	}, err
+}
+
+func (s *recordStore[T]) forEach(fn func(name string, obj *T) error) error {
+	return s._db.View(func(tx *bbolt.Tx) error {
+		return tx.Bucket(s._bucketName).ForEach(func(k, v []byte) error {
+			var r T
+			err := json.Unmarshal(v, &r)
+			if err != nil {
+				return err
+			}
+			return fn(string(k), &r)
+		})
+	})
+}
+
+func (s *recordStore[T]) get(name string) (*T, error) {
+	var r T
+	err := s._db.View(func(tx *bbolt.Tx) error {
+		data := tx.Bucket(s._bucketName).Get([]byte(name))
+		if data == nil {
+			return errRecordNotFound
+		}
+		return json.Unmarshal(data, &r)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (s *recordStore[T]) set(name string, obj *T) error {
+	data, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+	return s._db.Update(func(tx *bbolt.Tx) error {
+		return tx.Bucket(s._bucketName).Put([]byte(name), data)
+	})
+}
+
+var _ keyValueStore[initRecord] = (*recordStore[initRecord])(nil)
+var _ keyValueStore[acquireRecord] = (*recordStore[acquireRecord])(nil)
