@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package internal.proto.resource_map.v1;
+
+service ResourceMapService {
+  rpc TryInitResource(TryInitResourceRequest) returns (TryInitResourceResponse);
+  rpc CompleteInitResource(CompleteInitResourceRequest) returns (CompleteInitResourceResponse);
+  rpc Acquire(AcquireRequest) returns (AcquireResponse);
+  rpc Release(ReleaseRequest) returns (ReleaseResponse);
+}
+
+message TryInitResourceRequest {
+  string resource_name = 1;
+  string client_id = 2;
+}
+
+message TryInitResourceResponse {
+  bool should_try = 1;
+}
+
+message CompleteInitResourceRequest {
+  string resource_name = 1;
+  string client_id = 2;
+}
+
+message CompleteInitResourceResponse {}
+
+message AcquireRequest {
+  string resource_name = 1;
+  string client_id = 2;
+  int64 max_parallelism = 3;
+  bool exclusive = 4;
+}
+
+message AcquireResponse {}
+
+message ReleaseRequest {
+  string resource_name = 1;
+  string client_id = 2;
+}
+
+message ReleaseResponse {}

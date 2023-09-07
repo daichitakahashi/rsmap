@@ -1,0 +1,12 @@
+version: v1
+managed:
+  enabled: true
+  go_package_prefix:
+    default: github.com/daichitakahashi/rsmap/internal/gen
+plugins:
+  - plugin: buf.build/protocolbuffers/go
+    out: internal/gen
+    opt: paths=source_relative
+  - plugin: buf.build/bufbuild/connect-go
+    out: internal/gen
+    opt: paths=source_relative
