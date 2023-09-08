@@ -1,6 +1,6 @@
 module github.com/daichitakahashi/rsmap
 
-go 1.21
+go 1.21.1
 
 require (
 	github.com/bufbuild/connect-go v1.10.0

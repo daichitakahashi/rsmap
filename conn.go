@@ -11,9 +11,13 @@ import (
 	"os"
 	"time"
 
+	connect_go "github.com/bufbuild/connect-go"
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/backoff/v2"
 	"go.etcd.io/bbolt"
+
+	resource_mapv1 "github.com/daichitakahashi/rsmap/internal/proto/resource_map/v1"
+	"github.com/daichitakahashi/rsmap/internal/proto/resource_map/v1/resource_mapv1connect"
 )
 
 func connect(ctx context.Context, retry int) (func(), error) {
@@ -97,25 +101,24 @@ func newServer() (_ func(), err error) {
 		}
 	}()
 
+	rm, err := newServerSideMap(db)
+	if err != nil {
+		return nil, err
+	}
+
 	ln, err := net.Listen("tcp", ":0")
 	if err != nil {
 		return nil, err
 	}
 
-	var s http.Server
-	m := http.NewServeMux()
-	m.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req acquireRequest
-		err := json.NewDecoder(r.Body).Decode(&req)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		json.NewEncoder(w).Encode(acquireResponse{
-			ID: req.ID,
-		})
-	}))
-	s.Handler = m
+	http.Handle(
+		resource_mapv1connect.NewResourceMapServiceHandler(&resourceMapHandler{
+			_rm: rm,
+		}),
+	)
+	s := http.Server{
+		Handler: http.DefaultServeMux,
+	}
 	go func() {
 		err := s.Serve(ln)
 		_ = err // TODO:
@@ -131,6 +134,46 @@ func newServer() (_ func(), err error) {
 		_ = s.Close()
 	}, nil
 }
+
+type resourceMapHandler struct {
+	_rm *serverSideMap
+}
+
+func (h *resourceMapHandler) TryInitResource(ctx context.Context, req *connect_go.Request[resource_mapv1.TryInitResourceRequest]) (*connect_go.Response[resource_mapv1.TryInitResourceResponse], error) {
+	try, err := h._rm.tryInit(ctx, req.Msg.ResourceName, req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	return connect_go.NewResponse(&resource_mapv1.TryInitResourceResponse{
+		ShouldTry: try,
+	}), nil
+}
+
+func (h *resourceMapHandler) CompleteInitResource(ctx context.Context, req *connect_go.Request[resource_mapv1.CompleteInitResourceRequest]) (*connect_go.Response[resource_mapv1.CompleteInitResourceResponse], error) {
+	err := h._rm.completeInit(ctx, req.Msg.ResourceName, req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	return connect_go.NewResponse(&resource_mapv1.CompleteInitResourceResponse{}), nil
+}
+
+func (h *resourceMapHandler) Acquire(ctx context.Context, req *connect_go.Request[resource_mapv1.AcquireRequest]) (*connect_go.Response[resource_mapv1.AcquireResponse], error) {
+	err := h._rm.acquire(ctx, req.Msg.ResourceName, req.Msg.ClientId, req.Msg.MaxParallelism, req.Msg.Exclusive)
+	if err != nil {
+		return nil, err
+	}
+	return connect_go.NewResponse(&resource_mapv1.AcquireResponse{}), nil
+}
+
+func (h *resourceMapHandler) Release(ctx context.Context, req *connect_go.Request[resource_mapv1.ReleaseRequest]) (*connect_go.Response[resource_mapv1.ReleaseResponse], error) {
+	err := h._rm.release(ctx, req.Msg.ResourceName, req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	return connect_go.NewResponse(&resource_mapv1.ReleaseResponse{}), nil
+}
+
+var _ resource_mapv1connect.ResourceMapServiceHandler = (*resourceMapHandler)(nil)
 
 type acquireRequest struct {
 	ClientID string `json:"clientId"`
