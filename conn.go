@@ -3,16 +3,11 @@ package rsmap
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
-	"time"
 
 	connect_go "github.com/bufbuild/connect-go"
-	"github.com/google/uuid"
 	"github.com/lestrrat-go/backoff/v2"
 	"go.etcd.io/bbolt"
 
@@ -20,119 +15,89 @@ import (
 	"github.com/daichitakahashi/rsmap/internal/proto/resource_map/v1/resource_mapv1connect"
 )
 
-func connect(ctx context.Context, retry int) (func(), error) {
-	c := backoff.NewConstantPolicy(
-		backoff.WithInterval(time.Millisecond*500),
-		backoff.WithMaxRetries(retry),
-	).Start(ctx)
-	for {
-		select {
-		case <-c.Done():
-			return nil, errors.New("failed to connect server or establish new server")
-		case <-c.Next():
-			addr, err := readAddr()
-			if err == nil {
-				err = request(addr)
-				if err == nil {
-					return func() {}, nil
-				}
-			}
-			closeFn, err := newServer()
-			if err == nil {
-				return closeFn, nil
-			}
-		}
-	}
+type config struct {
+	dbFile      string
+	addrFile    string
+	retryPolicy backoff.Policy
+	httpCli     *http.Client
 }
 
-func readAddr() (string, error) {
-	data, err := os.ReadFile("addr")
+// Open database for server.
+// This blocks indefinitely.
+func (c *config) openDB() (*bbolt.DB, error) {
+	return bbolt.Open(c.dbFile, 0644, nil) // Set options if required.
+}
+
+// Read server address.
+func (c *config) readAddr() (string, error) {
+	data, err := os.ReadFile(c.addrFile)
 	if err != nil {
 		return "", err
 	}
 	return string(bytes.TrimSpace(data)), nil
 }
 
-func writeAddr(addr string) error {
-	return os.WriteFile("addr", []byte(addr), 0644)
+// Write server address for other clients.
+func (c *config) writeAddr(addr string) error {
+	return os.WriteFile(c.addrFile, []byte(addr), 0644)
 }
 
-func request(addr string) error {
-	var c http.Client
-	c.Timeout = time.Millisecond * 50
+func (m *Map) launchServer() func() {
+	done := make(chan struct{})
 
-	req := acquireRequest{
-		ClientID: uuid.NewString(),
-		ID:       uuid.NewString(),
-	}
-	data, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-
-	resp, err := c.Post("http://"+addr, "application/json", bytes.NewReader(data))
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-	var res acquireResponse
-	err = json.NewDecoder(resp.Body).Decode(&res)
-	if err != nil {
-		return err
-	}
-	if res.ID != req.ID {
-		return errors.New("unexpected id")
-	}
-	return nil
-}
-
-func newServer() (_ func(), err error) {
-	db, err := bbolt.Open("db.db", 0644, &bbolt.Options{
-		Timeout: time.Millisecond * 50,
-	})
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = db.Close()
-		}
-	}()
-
-	rm, err := newServerSideMap(db)
-	if err != nil {
-		return nil, err
-	}
-
-	ln, err := net.Listen("tcp", ":0")
-	if err != nil {
-		return nil, err
-	}
-
-	http.Handle(
-		resource_mapv1connect.NewResourceMapServiceHandler(&resourceMapHandler{
-			_rm: rm,
-		}),
-	)
-	s := http.Server{
-		Handler: http.DefaultServeMux,
-	}
 	go func() {
-		err := s.Serve(ln)
-		_ = err // TODO:
-	}()
+		db, err := m._cfg.openDB()
+		if err != nil {
+			return
+		}
+		defer db.Close()
 
-	err = writeAddr(ln.Addr().String())
-	if err != nil {
-		return nil, errors.Join(err, ln.Close())
-	}
+		select {
+		case <-done:
+			return
+		default:
+		}
+
+		rm, err := newServerSideMap(db)
+		if err != nil {
+			return
+		}
+
+		// Launch server.
+		ln, err := net.Listen("tcp", ":0")
+		if err != nil {
+			return
+		}
+		http.Handle(
+			resource_mapv1connect.NewResourceMapServiceHandler(&resourceMapHandler{
+				_rm: rm,
+			}),
+		)
+		s := http.Server{
+			Handler: http.DefaultServeMux,
+		}
+		go func() {
+			_ = s.Serve(ln)
+		}()
+
+		// Write addr for other clients.
+		err = m._cfg.writeAddr("http://" + ln.Addr().String())
+		if err != nil {
+			return
+		}
+
+		// Replace resourceMap with serverSideMap.
+		m._mu.Lock()
+		m._rm = rm
+		m._mu.Unlock()
+
+		<-done
+		_ = s.Shutdown(context.Background())
+	}()
 
 	return func() {
-		_ = db.Close()
-		_ = s.Close()
-	}, nil
+		close(done)
+	}
 }
 
 type resourceMapHandler struct {
@@ -175,11 +140,99 @@ func (h *resourceMapHandler) Release(ctx context.Context, req *connect_go.Reques
 
 var _ resource_mapv1connect.ResourceMapServiceHandler = (*resourceMapHandler)(nil)
 
-type acquireRequest struct {
-	ClientID string `json:"clientId"`
-	ID       string `json:"id"`
+type clientSideMap struct {
+	_cfg config
 }
 
-type acquireResponse struct {
-	ID string `json:"id"`
+func newClientSideMap(cfg config) *clientSideMap {
+	return &clientSideMap{
+		_cfg: cfg,
+	}
 }
+
+func (m *clientSideMap) try(ctx context.Context, op func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error) error {
+	var (
+		addr string
+		err  error
+		ctl  = m._cfg.retryPolicy.Start(ctx)
+	)
+	for {
+		select {
+		case <-ctl.Done():
+			// When ctx is canceled, or retry count is exceeded.
+			if e := ctx.Err(); e != nil {
+				return e
+			}
+			return err
+		case <-ctl.Next():
+			addr, err = m._cfg.readAddr()
+			if err != nil {
+				// Retry!
+				continue
+			}
+			// MEMO: Do we need to reuse service clients?
+			cli := resource_mapv1connect.NewResourceMapServiceClient(m._cfg.httpCli, addr)
+			if err = op(ctx, cli); err != nil {
+				// Retry!
+				continue
+			}
+		}
+	}
+}
+
+func (m *clientSideMap) tryInit(ctx context.Context, resourceName string, operator string) (try bool, _ error) {
+	err := m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
+
+		resp, err := cli.TryInitResource(ctx, connect_go.NewRequest(&resource_mapv1.TryInitResourceRequest{
+			ResourceName: resourceName,
+			ClientId:     operator,
+		}))
+		if err != nil {
+			return err
+		}
+
+		try = resp.Msg.ShouldTry
+		return nil
+	})
+	return try, err
+}
+
+func (m *clientSideMap) completeInit(ctx context.Context, resourceName string, operator string) error {
+	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
+
+		_, err := cli.CompleteInitResource(ctx, connect_go.NewRequest(&resource_mapv1.CompleteInitResourceRequest{
+			ResourceName: resourceName,
+			ClientId:     operator,
+		}))
+
+		return err
+	})
+}
+
+func (m *clientSideMap) acquire(ctx context.Context, resourceName string, operator string, max int64, exclusive bool) error {
+	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
+
+		_, err := cli.Acquire(ctx, connect_go.NewRequest(&resource_mapv1.AcquireRequest{
+			ResourceName:   resourceName,
+			ClientId:       operator,
+			MaxParallelism: max,
+			Exclusive:      exclusive,
+		}))
+
+		return err
+	})
+}
+
+func (m *clientSideMap) release(ctx context.Context, resourceName string, operator string) error {
+	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
+
+		_, err := cli.Release(ctx, connect_go.NewRequest(&resource_mapv1.ReleaseRequest{
+			ResourceName: resourceName,
+			ClientId:     operator,
+		}))
+
+		return err
+	})
+}
+
+var _ resourceMap = (*clientSideMap)(nil)

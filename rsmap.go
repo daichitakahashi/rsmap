@@ -3,21 +3,24 @@ package rsmap
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"sync"
+	"time"
 
-	connect_go "github.com/bufbuild/connect-go"
+	"github.com/google/uuid"
 	"github.com/lestrrat-go/backoff/v2"
 	"github.com/lestrrat-go/option"
 	"go.etcd.io/bbolt"
-
-	resource_mapv1 "github.com/daichitakahashi/rsmap/internal/proto/resource_map/v1"
-	"github.com/daichitakahashi/rsmap/internal/proto/resource_map/v1/resource_mapv1connect"
 )
 
 type (
 	// Map is the controller for external resource usage.
 	Map struct {
 		_clientID string
+		_cfg      config
+		_mu       sync.RWMutex
 		_rm       resourceMap
+		_stop     func()
 	}
 
 	// Resource brings an ability of acquire/release lock for the dedicated resource.
@@ -27,38 +30,32 @@ type (
 	}
 )
 
-// Create resourceMap for server side.
-// This map reads and updates bbolt.DB directly.
-func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
-	initRecordStore, err := newRecordStore[initRecord](db)
-	if err != nil {
-		return nil, err
-	}
-	acquireRecordStore, err := newRecordStore[acquireRecord](db)
-	if err != nil {
-		return nil, err
-	}
-
-	init, err := loadInitController(initRecordStore)
-	if err != nil {
-		return nil, err
-	}
-	acquire, err := loadAcquireController(acquireRecordStore)
-	if err != nil {
-		return nil, err
+func New() *Map {
+	// TODO: make optional
+	cfg := config{
+		dbFile:   "db.db",
+		addrFile: "addr",
+		retryPolicy: backoff.NewConstantPolicy(
+			backoff.WithMaxRetries(10),
+			backoff.WithInterval(time.Millisecond*100),
+		),
+		httpCli: http.DefaultClient,
 	}
 
-	return &serverSideMap{
-		_init:    init,
-		_acquire: acquire,
-	}, nil
+	m := &Map{
+		_clientID: uuid.NewString(),
+		_cfg:      cfg,
+		_rm:       newClientSideMap(cfg),
+	}
+
+	// Start server launch process, and set release function.
+	m._stop = m.launchServer()
+
+	return m
 }
 
-func newClientSideMap(cli resource_mapv1connect.ResourceMapServiceClient, retryPolicy backoff.Policy) *clientSideMap {
-	return &clientSideMap{
-		_cli:         cli,
-		_retryPolicy: retryPolicy,
-	}
+func (m *Map) Close() {
+	m._stop()
 }
 
 type (
@@ -108,8 +105,9 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 			init = opt.Value().(InitFunc)
 		}
 	}
-
+	m._mu.RLock()
 	try, err := m._rm.tryInit(ctx, name, m._clientID)
+	m._mu.RUnlock()
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +118,9 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 
 			// TODO: error handling.
 
+			m._mu.RLock()
 			err = m._rm.completeInit(ctx, name, m._clientID)
+			m._mu.RUnlock()
 			if err != nil {
 				return nil, err
 			}
@@ -146,6 +146,33 @@ type serverSideMap struct {
 	_acquire *acquireController
 }
 
+// Create resourceMap for server side.
+// This map reads and updates bbolt.DB directly.
+func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
+	initRecordStore, err := newRecordStore[initRecord](db)
+	if err != nil {
+		return nil, err
+	}
+	acquireRecordStore, err := newRecordStore[acquireRecord](db)
+	if err != nil {
+		return nil, err
+	}
+
+	init, err := loadInitController(initRecordStore)
+	if err != nil {
+		return nil, err
+	}
+	acquire, err := loadAcquireController(acquireRecordStore)
+	if err != nil {
+		return nil, err
+	}
+
+	return &serverSideMap{
+		_init:    init,
+		_acquire: acquire,
+	}, nil
+}
+
 func (m *serverSideMap) tryInit(ctx context.Context, resourceName, operator string) (bool, error) {
 	return m._init.tryInit(ctx, resourceName, operator)
 }
@@ -163,95 +190,6 @@ func (m *serverSideMap) release(_ context.Context, resourceName, operator string
 }
 
 var _ resourceMap = (*serverSideMap)(nil)
-
-type clientSideMap struct {
-	_cli         resource_mapv1connect.ResourceMapServiceClient
-	_retryPolicy backoff.Policy
-}
-
-func (m *clientSideMap) tryInit(ctx context.Context, resourceName string, operator string) (bool, error) {
-	ctl := m._retryPolicy.Start(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return false, ctx.Err()
-		case <-ctl.Next():
-			resp, err := m._cli.TryInitResource(ctx, connect_go.NewRequest(&resource_mapv1.TryInitResourceRequest{
-				ResourceName: resourceName,
-				ClientId:     operator,
-			}))
-			if err != nil {
-				// Retry!
-				continue
-			}
-			return resp.Msg.ShouldTry, nil
-		}
-	}
-}
-
-func (m *clientSideMap) completeInit(ctx context.Context, resourceName string, operator string) error {
-	ctl := m._retryPolicy.Start(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ctl.Next():
-			_, err := m._cli.CompleteInitResource(ctx, connect_go.NewRequest(&resource_mapv1.CompleteInitResourceRequest{
-				ResourceName: resourceName,
-				ClientId:     operator,
-			}))
-			if err != nil {
-				// Retry!
-				continue
-			}
-			return nil
-		}
-	}
-}
-
-func (m *clientSideMap) acquire(ctx context.Context, resourceName string, operator string, max int64, exclusive bool) error {
-	ctl := m._retryPolicy.Start(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ctl.Next():
-			_, err := m._cli.Acquire(ctx, connect_go.NewRequest(&resource_mapv1.AcquireRequest{
-				ResourceName:   resourceName,
-				ClientId:       operator,
-				MaxParallelism: max,
-				Exclusive:      exclusive,
-			}))
-			if err != nil {
-				// Retry!
-				continue
-			}
-			return nil
-		}
-	}
-}
-
-func (m *clientSideMap) release(ctx context.Context, resourceName string, operator string) error {
-	ctl := m._retryPolicy.Start(ctx)
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ctl.Next():
-			_, err := m._cli.Release(ctx, connect_go.NewRequest(&resource_mapv1.ReleaseRequest{
-				ResourceName: resourceName,
-				ClientId:     operator,
-			}))
-			if err != nil {
-				// Retry!
-				continue
-			}
-			return nil
-		}
-	}
-}
-
-var _ resourceMap = (*clientSideMap)(nil)
 
 // keyValueStore implementation for serverSideMap.
 type recordStore[T initRecord | acquireRecord] struct {
