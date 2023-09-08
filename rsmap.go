@@ -3,7 +3,10 @@ package rsmap
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -30,16 +33,54 @@ type (
 	}
 )
 
-func New() *Map {
-	// TODO: make optional
+type (
+	NewOption struct {
+		option.Interface
+	}
+	identOptionRetryPolicy struct{}
+	identOptionHTTPClient  struct{}
+)
+
+func WithRetryPolicy(p backoff.Policy) *NewOption {
+	return &NewOption{
+		Interface: option.New(identOptionRetryPolicy{}, p),
+	}
+}
+
+func WithHTTPClient(c *http.Client) *NewOption {
+	return &NewOption{
+		Interface: option.New(identOptionHTTPClient{}, c),
+	}
+}
+
+func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
+	// Check directory exists.
+	info, err := os.Stat(rsmapDir)
+	if err != nil {
+		return nil, fmt.Errorf("rsmapDir not exists: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("rsmapDir(%s) is not a directory", rsmapDir)
+	}
+
 	cfg := config{
-		dbFile:   "db.db",
-		addrFile: "addr",
+		dbFile:   filepath.Join(rsmapDir, "logs.db"),
+		addrFile: filepath.Join(rsmapDir, "addr"),
 		retryPolicy: backoff.NewConstantPolicy(
 			backoff.WithMaxRetries(10),
 			backoff.WithInterval(time.Millisecond*100),
 		),
-		httpCli: http.DefaultClient,
+		httpCli: &http.Client{},
+	}
+
+	// Apply options.
+	for _, opt := range opts {
+		switch opt.Ident() {
+		case identOptionRetryPolicy{}:
+			cfg.retryPolicy = opt.Value().(backoff.Policy)
+		case identOptionHTTPClient{}:
+			cfg.httpCli = opt.Value().(*http.Client)
+		}
 	}
 
 	m := &Map{
@@ -51,7 +92,7 @@ func New() *Map {
 	// Start server launch process, and set release function.
 	m._stop = m.launchServer()
 
-	return m
+	return m, nil
 }
 
 func (m *Map) Close() {
@@ -96,7 +137,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 		init InitFunc
 	)
 
-	// Check options.
+	// Apply options.
 	for _, opt := range opts {
 		switch opt.Ident() {
 		case identOptionParallelism{}:
