@@ -88,7 +88,7 @@ func (m *Map) launchServer() func() {
 
 		// Replace resourceMap with serverSideMap.
 		m._mu.Lock()
-		m._rm = rm
+		m.rm = rm
 		m._mu.Unlock()
 
 		<-done

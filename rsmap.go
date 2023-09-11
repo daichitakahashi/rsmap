@@ -19,17 +19,18 @@ import (
 type (
 	// Map is the controller for external resource usage.
 	Map struct {
-		_clientID string
-		_cfg      config
-		_mu       sync.RWMutex
-		_rm       resourceMap
-		_stop     func()
+		clientID string
+		_cfg     config
+		_mu      sync.RWMutex
+		rm       resourceMap
+		_stop    func()
 	}
 
 	// Resource brings an ability of acquire/release lock for the dedicated resource.
 	Resource struct {
-		_m *Map
-		_n int64
+		_m    *Map
+		_max  int64
+		_name string
 	}
 )
 
@@ -41,26 +42,40 @@ type (
 	identOptionHTTPClient  struct{}
 )
 
+// WithRetryPolicy specifies a retry policy of each operations(resource initializations, lock acquisitions).
+// For example, interval, exponential-backoff and max retry.
+// For detailed settings, see [backoff.NewExponentialPolicy] or [backoff.NewConstantPolicy].
 func WithRetryPolicy(p backoff.Policy) *NewOption {
 	return &NewOption{
 		Interface: option.New(identOptionRetryPolicy{}, p),
 	}
 }
 
+// WithHTTPClient specifies [http.Client] used for communication with server process.
+// If your process launches server, this client may not be used.
 func WithHTTPClient(c *http.Client) *NewOption {
 	return &NewOption{
 		Interface: option.New(identOptionHTTPClient{}, c),
 	}
 }
 
+// New creates an instance of [Map] that enables us to reuse external resources with thread safety.
+// Most common use-case is Go's parallelized testing of multiple packages (`go test -p=N ./...`.)
+//
+// Map has server mode and client mode.
+// If Map has initialized in server mode, it creates database `${rsmapDir}/logs.db` and write server address to `${rsmapDir}/addr`.
+// Other Map reads address of the server, and requests the server to acquire locks.
+// So, every Go packages(directories) must specify same location as an argument. Otherwise, we cannot provide correct control.
+// It's user's responsibility.
+//
+// In almost cases, following code can be helpful.
+//
+//	p,  _ := exec.Command("go", "mod", "GOMOD").Output() // Get file path of "go.mod".
+//	m, _ := rsmap.New(filepath.Join(filepath.Dir(string(p)), ".rsmap"))
 func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
-	// Check directory exists.
-	info, err := os.Stat(rsmapDir)
-	if err != nil {
-		return nil, fmt.Errorf("rsmapDir not exists: %w", err)
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("rsmapDir(%s) is not a directory", rsmapDir)
+	// Create directory is not exists.
+	if err := os.MkdirAll(rsmapDir, 0755); err != nil {
+		return nil, fmt.Errorf("rsmap: failed to prepare directory(rsmapDir): %w", err)
 	}
 
 	cfg := config{
@@ -84,9 +99,9 @@ func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 	}
 
 	m := &Map{
-		_clientID: uuid.NewString(),
-		_cfg:      cfg,
-		_rm:       newClientSideMap(cfg),
+		clientID: uuid.NewString(),
+		_cfg:     cfg,
+		rm:       newClientSideMap(cfg),
 	}
 
 	// Start server launch process, and set release function.
@@ -108,9 +123,8 @@ type (
 	identOptionInit        struct{}
 )
 
-// WithParallelism can specify max parallelism.
-// Default value is 5.
-func WithParallelism(n int64) *ResourceOption {
+// WithMaxParallelism can specify max parallelism.
+func WithMaxParallelism(n int64) *ResourceOption {
 	return &ResourceOption{
 		Interface: option.New(identOptionParallelism{}, n),
 	}
@@ -131,6 +145,9 @@ func WithInit(init InitFunc) *ResourceOption {
 }
 
 // Resource creates [Resource] object that provides control for resource usage.
+//
+// Resource has a setting for max parallelism, you can specify the value by [WithMaxParallelism](default value is 5.)
+// And you want to perform an initialization of the resource, use [WithInit].
 func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption) (*Resource, error) {
 	var (
 		n    = int64(5)
@@ -147,7 +164,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 		}
 	}
 	m._mu.RLock()
-	try, err := m._rm.tryInit(ctx, name, m._clientID)
+	try, err := m.rm.tryInit(ctx, name, m.clientID)
 	m._mu.RUnlock()
 	if err != nil {
 		return nil, err
@@ -160,7 +177,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 			// TODO: error handling.
 
 			m._mu.RLock()
-			err = m._rm.completeInit(ctx, name, m._clientID)
+			err = m.rm.completeInit(ctx, name, m.clientID)
 			m._mu.RUnlock()
 			if err != nil {
 				return nil, err
@@ -169,8 +186,34 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 	}
 
 	return &Resource{
-		_m: m,
-		_n: n,
+		_m:   m,
+		_max: n,
+	}, nil
+}
+
+type ReleaseFunc func() error
+
+// UseShared acquires shared lock of the Resource.
+// Returned ReleaseFunc must be called after using the resource to release lock.
+func (r *Resource) UseShared(ctx context.Context) (ReleaseFunc, error) {
+	err := r._m.rm.acquire(ctx, r._name, r._m.clientID, r._max, false)
+	if err != nil {
+		return nil, err
+	}
+	return func() error {
+		return r._m.rm.release(context.Background(), r._name, r._m.clientID)
+	}, nil
+}
+
+// UseExclusive acquires exclusive lock of the Resource.
+// Returned ReleaseFunc must be called after using the resource to release lock.
+func (r *Resource) UseExclusive(ctx context.Context) (ReleaseFunc, error) {
+	err := r._m.rm.acquire(ctx, r._name, r._m.clientID, r._max, true)
+	if err != nil {
+		return nil, err
+	}
+	return func() error {
+		return r._m.rm.release(context.Background(), r._name, r._m.clientID)
 	}, nil
 }
 
