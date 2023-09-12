@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -162,8 +163,37 @@ func TestMap_Resource(t *testing.T) {
 		)
 	})
 
-	// MaxParallelism
-	// InitFunc
+	t.Run("WithInit", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			dir   = t.TempDir()
+			count int64
+			i     = WithInit(func(ctx context.Context) {
+				atomic.AddInt64(&count, 1)
+			})
+		)
+		newResourceWithInit := func(t *testing.T) {
+			t.Helper()
+
+			m, err := New(dir)
+			assert.NilError(t, err)
+			t.Cleanup(m.Close)
+
+			_, err = m.Resource(background, "init", i)
+			assert.NilError(t, err)
+		}
+
+		// Try resource registration with init 5 times.
+		newResourceWithInit(t)
+		newResourceWithInit(t)
+		newResourceWithInit(t)
+		newResourceWithInit(t)
+		newResourceWithInit(t)
+
+		// Check count of init call.
+		assert.Assert(t, count == 1)
+	})
 }
 
 func TestRecordStore(t *testing.T) {
