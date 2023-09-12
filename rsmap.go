@@ -123,7 +123,7 @@ type (
 	identOptionInit        struct{}
 )
 
-// WithMaxParallelism can specify max parallelism.
+// WithMaxParallelism specifies max parallelism of the resource usage.
 func WithMaxParallelism(n int64) *ResourceOption {
 	return &ResourceOption{
 		Interface: option.New(identOptionParallelism{}, n),
@@ -150,8 +150,10 @@ func WithInit(init InitFunc) *ResourceOption {
 // And you want to perform an initialization of the resource, use [WithInit].
 func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption) (*Resource, error) {
 	var (
-		n    = int64(5)
-		init InitFunc
+		n             = int64(5)
+		init InitFunc = func(ctx context.Context) {
+			// Do nothing.
+		}
 	)
 
 	// Apply options.
@@ -164,24 +166,23 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 		}
 	}
 	m._mu.RLock()
-	try, err := m.rm.tryInit(ctx, name, m.clientID)
+	rm := m.rm
 	m._mu.RUnlock()
+	try, err := rm.tryInit(ctx, name, m.clientID)
 	if err != nil {
 		return nil, err
 	}
 	if try {
-		if init != nil {
-			// Initialization of the resource.
-			init(ctx)
+		// Initialization of the resource.
+		// TODO: error handling.
+		init(ctx)
 
-			// TODO: error handling.
-
-			m._mu.RLock()
-			err = m.rm.completeInit(ctx, name, m.clientID)
-			m._mu.RUnlock()
-			if err != nil {
-				return nil, err
-			}
+		m._mu.RLock()
+		rm := m.rm
+		m._mu.RUnlock()
+		err = rm.completeInit(ctx, name, m.clientID)
+		if err != nil {
+			return nil, err
 		}
 	}
 
