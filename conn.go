@@ -176,6 +176,7 @@ func (m *clientSideMap) try(ctx context.Context, op func(ctx context.Context, cl
 				// Retry!
 				continue
 			}
+			return nil
 		}
 	}
 }

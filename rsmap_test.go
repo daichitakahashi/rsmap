@@ -1,13 +1,125 @@
 package rsmap
 
 import (
+	"errors"
 	"math"
+	"net"
+	"net/http"
+	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
+	"time"
 
+	"github.com/lestrrat-go/backoff/v2"
 	"go.etcd.io/bbolt"
 	"gotest.tools/v3/assert"
 )
+
+type countTransport struct {
+	transport     http.RoundTripper
+	recordedTimes []time.Time
+}
+
+func (t *countTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.recordedTimes = append(t.recordedTimes, time.Now())
+	return t.transport.RoundTrip(req)
+}
+
+var _ http.RoundTripper = (*countTransport)(nil)
+
+func TestNew(t *testing.T) {
+	t.Parallel()
+
+	t.Run("rsmapDir exists as file", func(t *testing.T) {
+		t.Parallel()
+
+		// Create file.
+		dir := filepath.Join(t.TempDir(), "file")
+		assert.NilError(t, os.WriteFile(dir, []byte{'1'}, 0644))
+
+		_, err := New(dir)
+		var e *os.PathError
+		assert.Assert(t, errors.As(err, &e))
+		assert.DeepEqual(t, *e, os.PathError{
+			Op:   "mkdir",
+			Path: dir,
+			Err:  syscall.ENOTDIR,
+		})
+	})
+
+	t.Run("WithRetryPolicy and WithHTTPClient", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		// Open dummy DB to prevent server mode.
+		db, err := bbolt.Open(filepath.Join(dir, "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
+		// Create dummy server address.
+		ln, err := net.Listen("tcp", ":0")
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = ln.Close()
+		})
+		assert.NilError(t,
+			os.WriteFile(filepath.Join(dir, "addr"), []byte("http://"+ln.Addr().String()), 0644),
+		)
+
+		var (
+			p = backoff.NewConstantPolicy(
+				backoff.WithInterval(time.Millisecond*100),
+				backoff.WithMaxRetries(5),
+			)
+			tp = &countTransport{
+				transport: http.DefaultTransport,
+			}
+			c = &http.Client{
+				Transport: tp,
+				Timeout:   time.Millisecond * 100,
+			}
+		)
+
+		m, err := New(dir,
+			WithRetryPolicy(p),
+			WithHTTPClient(c),
+		)
+		assert.NilError(t, err)
+		t.Cleanup(m.Close)
+
+		_, err = m.Resource(background, "fails")
+		var ne net.Error
+		assert.Assert(t, errors.As(err, &ne) && ne.Timeout())
+		assert.Assert(t, len(tp.recordedTimes) >= 5) // Five (re)tries will be recorded.
+	})
+}
+
+type raceDetector map[string]bool
+
+func (d raceDetector) set(key string) {
+	d[key] = true
+}
+
+func (d raceDetector) get(key string) bool {
+	return d[key]
+}
+
+func TestMap_Resource(t *testing.T) {
+	t.Parallel()
+
+	var (
+		dir      = t.TempDir()
+		resource = make(raceDetector)
+	)
+
+	_ = dir
+	_ = resource
+
+	// MaxParallelism
+	// InitFunc
+}
 
 func TestRecordStore(t *testing.T) {
 	t.Parallel()
