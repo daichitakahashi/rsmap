@@ -81,7 +81,7 @@ func (c *initController) tryInit(ctx context.Context, resourceName, operator str
 
 	// If the operator acquires lock for init but the fact is not recognized by operator,
 	// give a second chance to do init.
-	if !ctl._completed && ctl._operator == operator {
+	if !ctl.completed.Load() && ctl.operator == operator {
 		return true, nil
 	}
 

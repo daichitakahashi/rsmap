@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 
 	"golang.org/x/sync/semaphore"
 )
@@ -12,15 +13,19 @@ import (
 type initCtl struct {
 	_lock chan struct{}
 	// _t      *time.Timer   // For timeout of started init operation.
-	_completed bool
-	_operator  string
+	completed *atomic.Bool
+	operator  string
 }
 
 // Create new initCtl.
 func newInitCtl(completed bool) *initCtl {
+	var c atomic.Bool
+	if completed {
+		c.Store(completed)
+	}
 	return &initCtl{
-		_lock:      make(chan struct{}, 1), // allocate minimum buffer
-		_completed: completed,
+		_lock:     make(chan struct{}, 1), // allocate minimum buffer
+		completed: &c,
 	}
 }
 
@@ -31,7 +36,7 @@ func (c *initCtl) tryInit(ctx context.Context, operator string, fn func(try bool
 	case <-ctx.Done():
 		return ctx.Err()
 	case c._lock <- struct{}{}:
-		if c._completed {
+		if c.completed.Load() {
 			if err := fn(false); err != nil {
 				return err
 			}
@@ -40,7 +45,7 @@ func (c *initCtl) tryInit(ctx context.Context, operator string, fn func(try bool
 		}
 
 		// Set current operator.
-		c._operator = operator
+		c.operator = operator
 
 		if err := fn(true); err != nil {
 			return err
@@ -54,12 +59,12 @@ func (c *initCtl) tryInit(ctx context.Context, operator string, fn func(try bool
 
 // Mark init operation as completed.
 func (c *initCtl) complete(operator string, fn func() error) error {
-	if c._operator != operator {
+	if c.operator != operator {
 		return errors.New("invalid operation")
 	}
 
 	// Update status.
-	c._completed = true
+	c.completed.Store(true)
 
 	if err := fn(); err != nil {
 		return err
