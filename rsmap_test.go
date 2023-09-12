@@ -98,18 +98,31 @@ func TestNew(t *testing.T) {
 	})
 }
 
-type raceDetector map[string]bool
-
-func (d raceDetector) set(key string) {
-	d[key] = true
-}
-
-func (d raceDetector) get(key string) bool {
-	return d[key]
-}
-
 func TestMap_Resource(t *testing.T) {
 	t.Parallel()
+
+	t.Run("Use multiple resources by multiple Map", func(t *testing.T) {
+		dir := t.TempDir()
+
+		newMap := func(t *testing.T) *Map {
+			t.Helper()
+
+			m, err := New(dir)
+			assert.NilError(t, err)
+			t.Cleanup(m.Close)
+			return m
+		}
+
+		treasure, err := newMap(t).Resource(background, "treasure")
+		assert.NilError(t, err)
+		assert.NilError(t, treasure.Lock(background))
+		t.Cleanup(func() { _ = treasure.UnlockAny() })
+
+		precious, err := newMap(t).Resource(background, "precious")
+		assert.NilError(t, err)
+		assert.NilError(t, precious.Lock(background))
+		t.Cleanup(func() { _ = precious.UnlockAny() })
+	})
 
 	t.Run("MaxParallelism", func(t *testing.T) {
 		t.Parallel()
