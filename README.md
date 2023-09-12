@@ -1,4 +1,5 @@
 # rsmap
+[![Go Reference](https://pkg.go.dev/badge/github.com/daichitakahashi/rsmap.svg)](https://pkg.go.dev/github.com/daichitakahashi/rsmap)
 
 ![](./sequence.drawio.svg)
 
