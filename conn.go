@@ -68,13 +68,14 @@ func (m *Map) launchServer() func() {
 		if err != nil {
 			return
 		}
-		http.Handle(
+		mux := http.NewServeMux()
+		mux.Handle(
 			resource_mapv1connect.NewResourceMapServiceHandler(&resourceMapHandler{
 				_rm: rm,
 			}),
 		)
 		s := http.Server{
-			Handler: http.DefaultServeMux,
+			Handler: mux,
 		}
 		go func() {
 			_ = s.Serve(ln)
