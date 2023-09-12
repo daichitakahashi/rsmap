@@ -187,8 +187,9 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 	}
 
 	return &Resource{
-		_m:   m,
-		_max: n,
+		_m:    m,
+		_max:  n,
+		_name: name,
 	}, nil
 }
 

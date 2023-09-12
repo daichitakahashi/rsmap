@@ -1,6 +1,7 @@
 package rsmap
 
 import (
+	"context"
 	"errors"
 	"math"
 	"net"
@@ -109,13 +110,57 @@ func (d raceDetector) get(key string) bool {
 func TestMap_Resource(t *testing.T) {
 	t.Parallel()
 
-	var (
-		dir      = t.TempDir()
-		resource = make(raceDetector)
-	)
+	t.Run("MaxParallelism", func(t *testing.T) {
+		t.Parallel()
 
-	_ = dir
-	_ = resource
+		var (
+			dir = t.TempDir()
+			p   = WithMaxParallelism(3)
+		)
+		ctxWithTimeout := func(t *testing.T) context.Context {
+			t.Helper()
+			ctx, cancel := context.WithTimeout(background, time.Second)
+			t.Cleanup(cancel)
+			return ctx
+		}
+		newMapResource := func(t *testing.T) *Resource {
+			t.Helper()
+
+			m, err := New(dir)
+			assert.NilError(t, err)
+			t.Cleanup(m.Close)
+
+			r, err := m.Resource(background, "trio", p)
+			assert.NilError(t, err)
+			return r
+		}
+
+		// Acquire shared locks until max parallelism(3).
+		r1 := newMapResource(t)
+		assert.NilError(t,
+			r1.RLock(ctxWithTimeout(t)),
+		)
+		t.Cleanup(func() { _ = r1.UnlockAny() })
+
+		r2 := newMapResource(t)
+		assert.NilError(t,
+			r2.RLock(ctxWithTimeout(t)),
+		)
+		t.Cleanup(func() { _ = r2.UnlockAny() })
+
+		r3 := newMapResource(t)
+		assert.NilError(t,
+			r3.RLock(ctxWithTimeout(t)),
+		)
+		t.Cleanup(func() { _ = r3.UnlockAny() })
+
+		// Try more acquisition. It will be timed out.
+		r4 := newMapResource(t)
+		assert.ErrorIs(t,
+			r4.RLock(ctxWithTimeout(t)),
+			context.DeadlineExceeded,
+		)
+	})
 
 	// MaxParallelism
 	// InitFunc
