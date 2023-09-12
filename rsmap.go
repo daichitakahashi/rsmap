@@ -115,7 +115,7 @@ func (m *Map) Close() {
 }
 
 type (
-	// ResourceOption represents option for [(*Map).Resource]
+	// ResourceOption represents option for [Resource]
 	ResourceOption struct {
 		option.Interface
 	}
@@ -135,7 +135,7 @@ type InitFunc func(ctx context.Context)
 
 // WithInit specifies InitFunc for resource initialization.
 //
-// InitFunc will be called only once globally, at first declaration by [(*Map).Resource].
+// InitFunc will be called only once globally, at first declaration by [Resource].
 // Other process waits until the completion of this initialization.
 // So, if Resource is called without this option, we cannot perform initializations with concurrency safety.
 func WithInit(init InitFunc) *ResourceOption {
@@ -192,30 +192,27 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 	}, nil
 }
 
-type ReleaseFunc func() error
-
-// UseShared acquires shared lock of the Resource.
-// Returned ReleaseFunc must be called after using the resource to release lock.
-func (r *Resource) UseShared(ctx context.Context) (ReleaseFunc, error) {
-	err := r._m.rm.acquire(ctx, r._name, r._m.clientID, r._max, false)
-	if err != nil {
-		return nil, err
-	}
-	return func() error {
-		return r._m.rm.release(context.Background(), r._name, r._m.clientID)
-	}, nil
+// RLock acquires shared lock of the Resource.
+// The instance of Resource can acquire only one lock.
+// Consecutive acquisition without unlock doesn't fail, but do nothing.
+//
+// To release lock, use [UnlockAny].
+func (r *Resource) RLock(ctx context.Context) error {
+	return r._m.rm.acquire(ctx, r._name, r._m.clientID, r._max, false)
 }
 
-// UseExclusive acquires exclusive lock of the Resource.
-// Returned ReleaseFunc must be called after using the resource to release lock.
-func (r *Resource) UseExclusive(ctx context.Context) (ReleaseFunc, error) {
-	err := r._m.rm.acquire(ctx, r._name, r._m.clientID, r._max, true)
-	if err != nil {
-		return nil, err
-	}
-	return func() error {
-		return r._m.rm.release(context.Background(), r._name, r._m.clientID)
-	}, nil
+// Lock acquires exclusive lock of the Resource.
+// The instance of Resource can acquire only one lock.
+// Consecutive acquisition without unlock doesn't fail, but do nothing.
+//
+// To release lock, use [UnlockAny].
+func (r *Resource) Lock(ctx context.Context) error {
+	return r._m.rm.acquire(ctx, r._name, r._m.clientID, r._max, true)
+}
+
+// UnlockAny releases acquired shared/exclusive lock by the Resource.
+func (r *Resource) UnlockAny() error {
+	return r._m.rm.release(context.Background(), r._name, r._m.clientID)
 }
 
 // Core interface for control operations for both server and client side.
