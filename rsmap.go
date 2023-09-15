@@ -2,7 +2,6 @@ package rsmap
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -255,11 +254,11 @@ type serverSideMap struct {
 // Create resourceMap for server side.
 // This map reads and updates bbolt.DB directly.
 func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
-	initRecordStore, err := newRecordStore[logs.InitRecord](db)
+	initRecordStore, err := logs.NewRecordStore[logs.InitRecord](db)
 	if err != nil {
 		return nil, err
 	}
-	acquireRecordStore, err := newRecordStore[logs.AcquireRecord](db)
+	acquireRecordStore, err := logs.NewRecordStore[logs.AcquireRecord](db)
 	if err != nil {
 		return nil, err
 	}
@@ -296,77 +295,3 @@ func (m *serverSideMap) release(_ context.Context, resourceName, operator string
 }
 
 var _ resourceMap = (*serverSideMap)(nil)
-
-// keyValueStore implementation for serverSideMap.
-type recordStore[T logs.InitRecord | logs.AcquireRecord] struct {
-	_bucketName []byte
-	_db         *bbolt.DB
-}
-
-func newRecordStore[T logs.InitRecord | logs.AcquireRecord](db *bbolt.DB) (*recordStore[T], error) {
-	var (
-		t          T
-		v          any = t
-		bucketName []byte
-	)
-	switch v.(type) {
-	case logs.InitRecord:
-		bucketName = []byte("init")
-	case logs.AcquireRecord:
-		bucketName = []byte("acquire")
-	}
-
-	err := db.Update(func(tx *bbolt.Tx) error {
-		// Create bucket for records.
-		_, err := tx.CreateBucketIfNotExists(bucketName)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &recordStore[T]{
-		_bucketName: bucketName,
-		_db:         db,
-	}, err
-}
-
-func (s *recordStore[T]) forEach(fn func(name string, obj *T) error) error {
-	return s._db.View(func(tx *bbolt.Tx) error {
-		return tx.Bucket(s._bucketName).ForEach(func(k, v []byte) error {
-			var r T
-			err := json.Unmarshal(v, &r)
-			if err != nil {
-				return err
-			}
-			return fn(string(k), &r)
-		})
-	})
-}
-
-func (s *recordStore[T]) get(name string) (*T, error) {
-	var r T
-	err := s._db.View(func(tx *bbolt.Tx) error {
-		data := tx.Bucket(s._bucketName).Get([]byte(name))
-		if data == nil {
-			return errRecordNotFound
-		}
-		return json.Unmarshal(data, &r)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &r, nil
-}
-
-func (s *recordStore[T]) set(name string, obj *T) error {
-	data, err := json.Marshal(obj)
-	if err != nil {
-		return err
-	}
-	return s._db.Update(func(tx *bbolt.Tx) error {
-		return tx.Bucket(s._bucketName).Put([]byte(name), data)
-	})
-}
-
-var _ keyValueStore[logs.InitRecord] = (*recordStore[logs.InitRecord])(nil)
-var _ keyValueStore[logs.AcquireRecord] = (*recordStore[logs.AcquireRecord])(nil)

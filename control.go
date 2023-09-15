@@ -13,27 +13,16 @@ import (
 // * status for init failure
 // * timeout for init and acquisition
 
-var errRecordNotFound = errors.New("record not found on key value store")
+type initController struct {
+	_kv        logs.RecordStore[logs.InitRecord] // TODO: fix name
+	_resources sync.Map
+}
 
-type (
-	keyValueStore[T any] interface {
-		get(name string) (*T, error)
-		set(name string, obj *T) error
-		forEach(fn func(name string, obj *T) error) error
-	}
-
-	// Control init status and persistence.
-	initController struct {
-		_kv        keyValueStore[logs.InitRecord]
-		_resources sync.Map
-	}
-)
-
-func loadInitController(store keyValueStore[logs.InitRecord]) (*initController, error) {
+func loadInitController(store logs.RecordStore[logs.InitRecord]) (*initController, error) {
 	c := &initController{
 		_kv: store,
 	}
-	err := c._kv.forEach(func(name string, obj *logs.InitRecord) error {
+	err := c._kv.ForEach(func(name string, obj *logs.InitRecord) error {
 		// Get init status and operator.
 		completed, operator := func() (bool, string) {
 			if len(obj.Logs) == 0 {
@@ -77,8 +66,8 @@ func (c *initController) tryInit(ctx context.Context, resourceName, operator str
 		}
 
 		// Update data on key value store.
-		r, err := c._kv.get(resourceName)
-		if errors.Is(err, errRecordNotFound) {
+		r, err := c._kv.Get(resourceName)
+		if errors.Is(err, logs.ErrRecordNotFound) {
 			r = &logs.InitRecord{}
 		} else if err != nil {
 			return err
@@ -88,7 +77,7 @@ func (c *initController) tryInit(ctx context.Context, resourceName, operator str
 			Operator:  operator,
 			Timestamp: time.Now().UnixNano(),
 		})
-		return c._kv.set(resourceName, r)
+		return c._kv.Set(resourceName, r)
 	})
 	if err != nil {
 		return false, err
@@ -105,7 +94,7 @@ func (c *initController) complete(resourceName, operator string) error {
 	ctl := v.(*initCtl)
 
 	return ctl.complete(operator, func() error {
-		r, err := c._kv.get(resourceName)
+		r, err := c._kv.Get(resourceName)
 		if err != nil {
 			return err
 		}
@@ -114,22 +103,22 @@ func (c *initController) complete(resourceName, operator string) error {
 			Operator:  operator,
 			Timestamp: time.Now().UnixNano(),
 		})
-		return c._kv.set(resourceName, r)
+		return c._kv.Set(resourceName, r)
 	})
 }
 
 // Control acquisition status and persistence.
 type acquireController struct {
-	_kv        keyValueStore[logs.AcquireRecord]
+	_kv        logs.RecordStore[logs.AcquireRecord]
 	_resources sync.Map
 }
 
-func loadAcquireController(store keyValueStore[logs.AcquireRecord]) (*acquireController, error) {
+func loadAcquireController(store logs.RecordStore[logs.AcquireRecord]) (*acquireController, error) {
 	c := &acquireController{
 		_kv: store,
 	}
 
-	err := store.forEach(func(name string, obj *logs.AcquireRecord) error {
+	err := store.ForEach(func(name string, obj *logs.AcquireRecord) error {
 		acquired := map[string]int64{}
 		// Replay stored acquisitions of the resource.
 		for _, log := range obj.Logs {
@@ -171,8 +160,8 @@ func (c *acquireController) acquire(ctx context.Context, resourceName, operator 
 		return nil
 	}
 
-	r, err := c._kv.get(resourceName)
-	if errors.Is(err, errRecordNotFound) {
+	r, err := c._kv.Get(resourceName)
+	if errors.Is(err, logs.ErrRecordNotFound) {
 		r = &logs.AcquireRecord{
 			Max: max,
 		}
@@ -185,7 +174,7 @@ func (c *acquireController) acquire(ctx context.Context, resourceName, operator 
 		Operator:  operator,
 		Timestamp: time.Now().UnixNano(),
 	})
-	return c._kv.set(resourceName, r)
+	return c._kv.Set(resourceName, r)
 }
 
 func (c *acquireController) release(resourceName, operator string) error {
@@ -200,7 +189,7 @@ func (c *acquireController) release(resourceName, operator string) error {
 		return nil
 	}
 
-	r, err := c._kv.get(resourceName)
+	r, err := c._kv.Get(resourceName)
 	if err != nil {
 		return err
 	}
@@ -210,5 +199,5 @@ func (c *acquireController) release(resourceName, operator string) error {
 		Operator:  operator,
 		Timestamp: time.Now().UnixNano(),
 	})
-	return c._kv.set(resourceName, r)
+	return c._kv.Set(resourceName, r)
 }

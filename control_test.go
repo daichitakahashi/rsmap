@@ -10,7 +10,16 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/daichitakahashi/rsmap/logs"
+	"github.com/daichitakahashi/rsmap/logs/logstest"
 )
+
+func asyncResult[T any](fn func() T) (result <-chan T) {
+	ch := make(chan T)
+	go func() {
+		ch <- fn()
+	}()
+	return ch
+}
 
 func TestInitController(t *testing.T) {
 	t.Parallel()
@@ -19,18 +28,18 @@ func TestInitController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[logs.InitRecord](
+			kv = logstest.NewMockRecordStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
 			r logs.InitRecord
 		)
-		kv.EXPECT().forEach(gomock.Any()).
+		kv.EXPECT().ForEach(gomock.Any()).
 			Return(nil).
 			Times(1)
-		kv.EXPECT().get("treasure").
+		kv.EXPECT().Get("treasure").
 			Return(&r, nil).
 			Times(2) // Called by tryInit and complete.
-		kv.EXPECT().set("treasure", &r).
+		kv.EXPECT().Set("treasure", &r).
 			Return(nil).
 			Times(2) // Called by tryInit and complete.
 
@@ -95,18 +104,18 @@ func TestInitController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[logs.InitRecord](
+			kv = logstest.NewMockRecordStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
 			r logs.InitRecord
 		)
-		kv.EXPECT().forEach(gomock.Any()).
+		kv.EXPECT().ForEach(gomock.Any()).
 			Return(nil).
 			Times(1)
-		kv.EXPECT().get("treasure").
+		kv.EXPECT().Get("treasure").
 			Return(&r, nil).
 			Times(1)
-		kv.EXPECT().set("treasure", &r).
+		kv.EXPECT().Set("treasure", &r).
 			Return(nil).
 			Times(1)
 
@@ -138,7 +147,7 @@ func TestInitController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[logs.InitRecord](
+			kv = logstest.NewMockRecordStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
 			r = logs.InitRecord{
@@ -152,13 +161,13 @@ func TestInitController(t *testing.T) {
 			}
 		)
 		// Restore init try by Alice.
-		kv.EXPECT().forEach(gomock.Any()).
+		kv.EXPECT().ForEach(gomock.Any()).
 			DoAndReturn(func(f func(string, *logs.InitRecord) error) error {
 				f("treasure", &r)
 				return nil
 			}).Times(1)
-		kv.EXPECT().get("treasure").Return(&r, nil).Times(1)
-		kv.EXPECT().set("treasure", &r).Return(nil).Times(1)
+		kv.EXPECT().Get("treasure").Return(&r, nil).Times(1)
+		kv.EXPECT().Set("treasure", &r).Return(nil).Times(1)
 
 		ctl, err := loadInitController(kv)
 		assert.NilError(t, err)
@@ -196,7 +205,7 @@ func TestInitController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[logs.InitRecord](
+			kv = logstest.NewMockRecordStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
 			r = logs.InitRecord{
@@ -213,7 +222,7 @@ func TestInitController(t *testing.T) {
 				},
 			}
 		)
-		kv.EXPECT().forEach(gomock.Any()).
+		kv.EXPECT().ForEach(gomock.Any()).
 			DoAndReturn(func(f func(string, *logs.InitRecord) error) error {
 				f("treasure", &r)
 				return nil
@@ -236,22 +245,22 @@ func TestAcquireController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[logs.AcquireRecord](
+			kv = logstest.NewMockRecordStore[logs.AcquireRecord](
 				gomock.NewController(t),
 			)
 			r *logs.AcquireRecord
 		)
-		kv.EXPECT().forEach(gomock.Any()).
+		kv.EXPECT().ForEach(gomock.Any()).
 			Return(nil).
 			Times(1)
-		kv.EXPECT().get("treasure").
+		kv.EXPECT().Get("treasure").
 			DoAndReturn(func(string) (*logs.AcquireRecord, error) {
 				if r == nil {
-					return nil, errRecordNotFound
+					return nil, logs.ErrRecordNotFound
 				}
 				return r, nil
 			}).Times(6)
-		kv.EXPECT().set("treasure", gomock.Any()).
+		kv.EXPECT().Set("treasure", gomock.Any()).
 			DoAndReturn(func(_ string, set *logs.AcquireRecord) error {
 				r = set
 				return nil
@@ -326,22 +335,22 @@ func TestAcquireController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[logs.AcquireRecord](
+			kv = logstest.NewMockRecordStore[logs.AcquireRecord](
 				gomock.NewController(t),
 			)
 			r *logs.AcquireRecord
 		)
-		kv.EXPECT().forEach(gomock.Any()).
+		kv.EXPECT().ForEach(gomock.Any()).
 			Return(nil).
 			Times(1)
-		kv.EXPECT().get("treasure").
+		kv.EXPECT().Get("treasure").
 			DoAndReturn(func(s string) (*logs.AcquireRecord, error) {
 				if r == nil {
-					return nil, errRecordNotFound
+					return nil, logs.ErrRecordNotFound
 				}
 				return r, nil
 			}).Times(2) // Called by acquire and release.
-		kv.EXPECT().set("treasure", gomock.Any()).
+		kv.EXPECT().Set("treasure", gomock.Any()).
 			DoAndReturn(func(s string, set *logs.AcquireRecord) error {
 				r = set
 				return nil
@@ -390,7 +399,7 @@ func TestAcquireController(t *testing.T) {
 
 		var (
 			mc             = gomock.NewController(t)
-			kv             = NewMockkeyValueStore[logs.AcquireRecord](mc)
+			kv             = logstest.NewMockRecordStore[logs.AcquireRecord](mc)
 			treasureRecord = &logs.AcquireRecord{
 				Max: 10,
 				Logs: []logs.AcquireLog{
@@ -424,7 +433,7 @@ func TestAcquireController(t *testing.T) {
 			}
 		)
 		// Replay stored operations.
-		kv.EXPECT().forEach(gomock.Any()).
+		kv.EXPECT().ForEach(gomock.Any()).
 			DoAndReturn(func(f func(string, *logs.AcquireRecord) error) error {
 				records := map[string]*logs.AcquireRecord{
 					"treasure": treasureRecord,
@@ -443,10 +452,10 @@ func TestAcquireController(t *testing.T) {
 		{
 			// "treasure"
 
-			kv.EXPECT().get("treasure").
+			kv.EXPECT().Get("treasure").
 				Return(treasureRecord, nil).
 				Times(1)
-			kv.EXPECT().set("treasure", treasureRecord).
+			kv.EXPECT().Set("treasure", treasureRecord).
 				Times(1)
 
 			// Alice's consecutive acquisition is ignored.
@@ -493,10 +502,10 @@ func TestAcquireController(t *testing.T) {
 		{
 			// "precious"
 
-			kv.EXPECT().get("precious").
+			kv.EXPECT().Get("precious").
 				Return(preciousRecord, nil).
 				Times(2)
-			kv.EXPECT().set("precious", preciousRecord).
+			kv.EXPECT().Set("precious", preciousRecord).
 				Times(2)
 
 			// Acquisition of shared lock by Bob fails.
