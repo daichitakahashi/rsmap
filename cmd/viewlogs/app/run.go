@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/fatih/color"
@@ -59,8 +60,33 @@ func run(filename, operation, resource string) error {
 		return errors.New("resource id must be specified")
 	}
 
-	tbl := table.New("Timestamp", "Operation", "Operator", "Data")
-	var last time.Time
+	type row struct {
+		ts        int64 // timestamp
+		operation string
+		operator  string
+		data      string
+	}
+	var rows []row
+	insert := func(r row) {
+		idx, _ := slices.BinarySearchFunc(rows, r, func(r1, r2 row) int {
+			switch {
+			case r1.ts == r2.ts:
+				return 0
+			case r1.ts < r2.ts:
+				return -1
+			default:
+				return 1
+			}
+		})
+
+		if idx == len(rows) {
+			rows = append(rows, r)
+		} else {
+			rows = append(rows, row{})
+			copy(rows[idx+1:], rows[idx:])
+			rows[idx] = r
+		}
+	}
 
 	if init {
 		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
@@ -73,7 +99,12 @@ func run(filename, operation, resource string) error {
 			return err
 		}
 		for _, l := range r.Logs {
-			tbl.AddRow(formatTime(l.Timestamp, &last), "init:"+l.Event, l.Operator, "")
+			insert(row{
+				ts:        l.Timestamp,
+				operation: "init:" + string(l.Event),
+				operator:  l.Operator,
+				data:      "",
+			})
 		}
 	}
 
@@ -95,18 +126,29 @@ func run(filename, operation, resource string) error {
 			if l.Event == logs.AcquireEventAcquired {
 				data = fmt.Sprintf("%sN=%d", data, l.N)
 			}
-			tbl.AddRow(formatTime(l.Timestamp, &last), l.Event, l.Operator, data)
+			insert(row{
+				ts:        l.Timestamp,
+				operation: string(l.Event),
+				operator:  l.Operator,
+				data:      data,
+			})
 		}
 	}
 
 	fmt.Printf("Resource identifier: %q\n\n", resource)
-	tbl.
+	tbl := table.New("Timestamp", "Operation", "Operator", "Data").
 		WithHeaderFormatter(
 			color.New(color.FgGreen, color.Underline).SprintfFunc(),
 		).
 		WithFirstColumnFormatter(
 			color.New(color.FgYellow).SprintfFunc(),
-		).Print()
+		)
+
+	var last time.Time
+	for _, r := range rows {
+		tbl.AddRow(formatTime(r.ts, &last), r.operation, r.operator, r.data)
+	}
+	tbl.Print()
 
 	return nil
 }
