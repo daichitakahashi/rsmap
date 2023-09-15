@@ -28,7 +28,7 @@ func TestInitController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = logstest.NewMockRecordStore[logs.InitRecord](
+			kv = logstest.NewMockResourceRecordStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
 			r logs.InitRecord
@@ -104,7 +104,7 @@ func TestInitController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = logstest.NewMockRecordStore[logs.InitRecord](
+			kv = logstest.NewMockResourceRecordStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
 			r logs.InitRecord
@@ -147,7 +147,7 @@ func TestInitController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = logstest.NewMockRecordStore[logs.InitRecord](
+			kv = logstest.NewMockResourceRecordStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
 			r = logs.InitRecord{
@@ -205,7 +205,7 @@ func TestInitController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = logstest.NewMockRecordStore[logs.InitRecord](
+			kv = logstest.NewMockResourceRecordStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
 			r = logs.InitRecord{
@@ -245,7 +245,7 @@ func TestAcquireController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = logstest.NewMockRecordStore[logs.AcquireRecord](
+			kv = logstest.NewMockResourceRecordStore[logs.AcquireRecord](
 				gomock.NewController(t),
 			)
 			r *logs.AcquireRecord
@@ -335,7 +335,7 @@ func TestAcquireController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = logstest.NewMockRecordStore[logs.AcquireRecord](
+			kv = logstest.NewMockResourceRecordStore[logs.AcquireRecord](
 				gomock.NewController(t),
 			)
 			r *logs.AcquireRecord
@@ -399,7 +399,7 @@ func TestAcquireController(t *testing.T) {
 
 		var (
 			mc             = gomock.NewController(t)
-			kv             = logstest.NewMockRecordStore[logs.AcquireRecord](mc)
+			kv             = logstest.NewMockResourceRecordStore[logs.AcquireRecord](mc)
 			treasureRecord = &logs.AcquireRecord{
 				Max: 10,
 				Logs: []logs.AcquireLog{

@@ -63,7 +63,7 @@ func run(filename, operation, resource string) error {
 	var last time.Time
 
 	if init {
-		store, err := logs.NewRecordStore[logs.InitRecord](db)
+		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
 		if err != nil {
 			return err
 		}
@@ -78,7 +78,7 @@ func run(filename, operation, resource string) error {
 	}
 
 	if acquire {
-		store, err := logs.NewRecordStore[logs.AcquireRecord](db)
+		store, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
 		if err != nil {
 			return err
 		}

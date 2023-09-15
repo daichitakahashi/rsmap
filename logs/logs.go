@@ -7,6 +7,84 @@ import (
 	"go.etcd.io/bbolt"
 )
 
+var (
+	bucketInfo    = []byte("info")
+	bucketInit    = []byte("init")
+	bucketAcquire = []byte("acquire")
+
+	infoServerKey = []byte("server")
+)
+
+type ServerEvent string
+
+const (
+	ServerEventLaunched = "launched"
+	ServerEventStopped  = "stopped"
+)
+
+type (
+	ServerRecord struct {
+		Logs []ServerLog
+	}
+
+	ServerLog struct {
+		Event     ServerEvent `json:"event"`
+		Addr      string      `json:"addr,omitempty"`
+		Operator  string      `json:"operator"`
+		Timestamp int64       `json:"ts,string"`
+	}
+)
+
+type InfoStore struct {
+	_db *bbolt.DB
+
+	_server *ServerRecord
+}
+
+func NewInfoStore(db *bbolt.DB) (*InfoStore, error) {
+	var server ServerRecord
+
+	err := db.Update(func(tx *bbolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists(bucketInfo)
+		if err != nil {
+			return err
+		}
+
+		data := b.Get(infoServerKey)
+		if data != nil {
+			err = json.Unmarshal(data, &server)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &InfoStore{
+		_db:     db,
+		_server: &server,
+	}, nil
+}
+
+func (s *InfoStore) ServerRecord() *ServerRecord {
+	return s._server
+}
+
+func (s *InfoStore) PutServerLog(l ServerLog) error {
+	return s._db.Update(func(tx *bbolt.Tx) error {
+		s._server.Logs = append(s._server.Logs, l)
+		data, err := json.Marshal(s._server)
+		if err != nil {
+			return err
+		}
+		return tx.Bucket(bucketInfo).Put(infoServerKey, data)
+	})
+}
+
 type InitEvent string
 
 const (
@@ -48,7 +126,7 @@ type (
 )
 
 type (
-	RecordStore[T any] interface {
+	ResourceRecordStore[T any] interface {
 		Get(identifier string) (*T, error)
 		Set(identifier string, record *T) error
 		ForEach(fn func(identifier string, record *T) error) error
@@ -62,7 +140,7 @@ type (
 
 var ErrRecordNotFound = errors.New("record not found on key value store")
 
-func NewRecordStore[T InitRecord | AcquireRecord](db *bbolt.DB) (RecordStore[T], error) {
+func NewResourceRecordStore[T InitRecord | AcquireRecord](db *bbolt.DB) (ResourceRecordStore[T], error) {
 	var (
 		t          T
 		v          any = t
@@ -70,9 +148,9 @@ func NewRecordStore[T InitRecord | AcquireRecord](db *bbolt.DB) (RecordStore[T],
 	)
 	switch v.(type) {
 	case InitRecord:
-		bucketName = []byte("init")
+		bucketName = bucketInit
 	case AcquireRecord:
-		bucketName = []byte("acquire")
+		bucketName = bucketAcquire
 	}
 
 	err := db.Update(func(tx *bbolt.Tx) error {

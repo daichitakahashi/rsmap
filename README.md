@@ -10,8 +10,20 @@
 
 |Bucket|Key|Value|
 |---|---|---|
+|`info`|`server`|`serverRecord`|
 |`init`|`${resource}`|`initRecord`|
 |`acquire`|`${resource}`|`acquireRecord`|
+
+```typescript
+type serverRecord = {
+    logs: {
+        event: "launched" | "stopped"
+        addr?: "${addr}"
+        operator: "${clientID}"
+        ts: 31536000
+    }
+}
+```
 
 ```typescript
 type initRecord = {
@@ -28,7 +40,7 @@ type acquireRecord = {
     max: 999
     logs: {
         event: "acquired" | "released"
-        n: 1 // 1 for shared, 999 for exclusive
+        n?: 1 // 1 for shared, 999 for exclusive
         operator: "${clientID}"
         ts: 31536000
     }[]
