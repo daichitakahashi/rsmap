@@ -55,9 +55,18 @@ func TestNew(t *testing.T) {
 	t.Run("WithRetryPolicy and WithHTTPClient", func(t *testing.T) {
 		t.Parallel()
 
-		dir := t.TempDir()
+		// Set executionID manually.
+		const executionID = "0"
+		assert.NilError(t, os.Setenv(EnvExecutionID, executionID))
+
+		var (
+			base      = t.TempDir()
+			actualDir = filepath.Join(base, executionID)
+		)
+		assert.NilError(t, os.MkdirAll(actualDir, 0755))
+
 		// Open dummy DB to prevent server mode.
-		db, err := bbolt.Open(filepath.Join(dir, "logs.db"), 0644, nil)
+		db, err := bbolt.Open(filepath.Join(actualDir, "logs.db"), 0644, nil)
 		assert.NilError(t, err)
 		t.Cleanup(func() {
 			_ = db.Close()
@@ -69,7 +78,7 @@ func TestNew(t *testing.T) {
 			_ = ln.Close()
 		})
 		assert.NilError(t,
-			os.WriteFile(filepath.Join(dir, "addr"), []byte("http://"+ln.Addr().String()), 0644),
+			os.WriteFile(filepath.Join(actualDir, "addr"), []byte("http://"+ln.Addr().String()), 0644),
 		)
 
 		var (
@@ -86,7 +95,7 @@ func TestNew(t *testing.T) {
 			}
 		)
 
-		m, err := New(dir,
+		m, err := New(base,
 			WithRetryPolicy(p),
 			WithHTTPClient(c),
 		)
@@ -95,7 +104,7 @@ func TestNew(t *testing.T) {
 
 		_, err = m.Resource(background, "fails")
 		var ne net.Error
-		assert.Assert(t, errors.As(err, &ne) && ne.Timeout())
+		assert.Assert(t, errors.As(err, &ne) && ne.Timeout(), "actual: %v", err)
 		assert.Assert(t, len(tp.recordedTimes) >= 5) // Five (re)tries will be recorded.
 	})
 }

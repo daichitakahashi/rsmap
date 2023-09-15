@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -61,28 +62,48 @@ func WithHTTPClient(c *http.Client) *NewOption {
 	}
 }
 
+const (
+	EnvExecutionID = "RSMAP_EXECUTION_ID"
+)
+
+func getDir(base string) string {
+	// Get execution ID.
+	executionID := strconv.Itoa(os.Getppid()) // The process of `go test`
+	if id, ok := os.LookupEnv(EnvExecutionID); ok {
+		executionID = id
+	}
+
+	return filepath.Join(base, executionID)
+}
+
 // New creates an instance of [Map] that enables us to reuse external resources with thread safety.
 // Most common use-case is Go's parallelized testing of multiple packages (`go test -p=N ./...`.)
 //
 // Map has server mode and client mode.
-// If Map has initialized in server mode, it creates database `${rsmapDir}/logs.db` and write server address to `${rsmapDir}/addr`.
+// If Map has initialized in server mode, it creates database `logs.db` and write server address to `addr` under `${rsmapDir}/${executionID}/`.
 // Other Map reads address of the server, and requests the server to acquire locks.
 // So, every Go packages(directories) must specify same location as an argument. Otherwise, we cannot provide correct control.
 // It's user's responsibility.
+//
+// `executionID` is the identifier of the execution of `go test`. In default, we use the value of [os.Getppid()].
+// If you want to specify the id explicitly, set the value to `RSMAP_EXECUTION_ID` environment variable.
 //
 // In almost cases, following code can be helpful.
 //
 //	p,  _ := exec.Command("go", "mod", "GOMOD").Output() // Get file path of "go.mod".
 //	m, _ := rsmap.New(filepath.Join(filepath.Dir(strings.TrimSpace(string(p))), ".rsmap"))
 func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
-	// Create directory is not exists.
-	if err := os.MkdirAll(rsmapDir, 0755); err != nil {
+	// Get directory for `logs.db` and `addr`.
+	dir := getDir(rsmapDir)
+
+	// Create directory if not exists.
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("rsmap: failed to prepare directory(rsmapDir): %w", err)
 	}
 
 	cfg := config{
-		dbFile:   filepath.Join(rsmapDir, "logs.db"),
-		addrFile: filepath.Join(rsmapDir, "addr"),
+		dbFile:   filepath.Join(dir, "logs.db"),
+		addrFile: filepath.Join(dir, "addr"),
 		retryPolicy: backoff.NewConstantPolicy(
 			backoff.WithMaxRetries(10),
 			backoff.WithInterval(time.Millisecond*100),
