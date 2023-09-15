@@ -112,6 +112,9 @@ func (m *Map) launchServer(clientID string) func() {
 		m._mu.Unlock()
 
 		<-done
+		defer func() {
+			done <- struct{}{}
+		}()
 		_ = s.Shutdown(context.Background())
 
 		// Record stopped server.
@@ -123,7 +126,8 @@ func (m *Map) launchServer(clientID string) func() {
 	}()
 
 	return func() {
-		close(done)
+		done <- struct{}{}
+		<-done
 	}
 }
 
