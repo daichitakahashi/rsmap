@@ -29,14 +29,89 @@ func mustBeCalledOnce[T any](t *testing.T, fn func(t *testing.T, v T)) func(t *t
 	}
 }
 
-func TestRecordStore(t *testing.T) {
+func TestInfoStore(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	func() {
+		db, err := bbolt.Open(filepath.Join(dir, "records.db"), 0644, nil)
+		assert.NilError(t, err)
+		defer func() {
+			_ = db.Close()
+		}()
+
+		store, err := NewInfoStore(db)
+		assert.NilError(t, err)
+
+		// Store server logs.
+		assert.NilError(t, store.PutServerLog(ServerLog{
+			Event:     ServerEventLaunched,
+			Addr:      "http://localhost:8080",
+			Operator:  "alice",
+			Timestamp: 1694765593803865000,
+		}))
+		assert.NilError(t, store.PutServerLog(ServerLog{
+			Event:     ServerEventStopped,
+			Operator:  "alice",
+			Timestamp: 1694765603344265000,
+		}))
+
+		// Get server logs(actually, not stored).
+		assert.DeepEqual(t, *store.ServerRecord(), ServerRecord{
+			Logs: []ServerLog{
+				{
+					Event:     ServerEventLaunched,
+					Addr:      "http://localhost:8080",
+					Operator:  "alice",
+					Timestamp: 1694765593803865000,
+				},
+				{
+					Event:     ServerEventStopped,
+					Operator:  "alice",
+					Timestamp: 1694765603344265000,
+				},
+			},
+		})
+	}()
+
+	db, err := bbolt.Open(filepath.Join(dir, "records.db"), 0644, nil)
+	assert.NilError(t, err)
+	defer func() {
+		_ = db.Close()
+	}()
+
+	store, err := NewInfoStore(db)
+	assert.NilError(t, err)
+
+	// Get stored server logs.
+	assert.DeepEqual(t, *store.ServerRecord(), ServerRecord{
+		Logs: []ServerLog{
+			{
+				Event:     ServerEventLaunched,
+				Addr:      "http://localhost:8080",
+				Operator:  "alice",
+				Timestamp: 1694765593803865000,
+			},
+			{
+				Event:     ServerEventStopped,
+				Operator:  "alice",
+				Timestamp: 1694765603344265000,
+			},
+		},
+	})
+}
+
+func TestResourceRecordStore(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	db, err := bbolt.Open(filepath.Join(dir, "records.db"), 0644, nil)
 	assert.NilError(t, err)
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
 
-	store, err := NewRecordStore[InitRecord](db)
+	store, err := NewResourceRecordStore[InitRecord](db)
 	assert.NilError(t, err)
 
 	// Record is not stored yet.
@@ -77,11 +152,11 @@ func TestRecordStore(t *testing.T) {
 				{
 					Event:     InitEventStarted,
 					Operator:  "bob",
-					Timestamp: 1694060338,
+					Timestamp: 1694765621790751000,
 				}, {
 					Event:     InitEventCompleted,
 					Operator:  "bob",
-					Timestamp: 1694060381,
+					Timestamp: 1694765637968901000,
 				},
 			},
 		}),
@@ -105,11 +180,11 @@ func TestRecordStore(t *testing.T) {
 				{
 					Event:     InitEventStarted,
 					Operator:  "bob",
-					Timestamp: 1694060338,
+					Timestamp: 1694765621790751000,
 				}, {
 					Event:     InitEventCompleted,
 					Operator:  "bob",
-					Timestamp: 1694060381,
+					Timestamp: 1694765637968901000,
 				},
 			},
 		})

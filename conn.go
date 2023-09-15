@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	connect_go "github.com/bufbuild/connect-go"
 	"github.com/lestrrat-go/backoff/v2"
@@ -13,6 +14,7 @@ import (
 
 	resource_mapv1 "github.com/daichitakahashi/rsmap/internal/proto/resource_map/v1"
 	"github.com/daichitakahashi/rsmap/internal/proto/resource_map/v1/resource_mapv1connect"
+	"github.com/daichitakahashi/rsmap/logs"
 )
 
 type config struct {
@@ -42,7 +44,7 @@ func (c *config) writeAddr(addr string) error {
 	return os.WriteFile(c.addrFile, []byte(addr), 0644)
 }
 
-func (m *Map) launchServer() func() {
+func (m *Map) launchServer(clientID string) func() {
 	done := make(chan struct{})
 
 	go func() {
@@ -56,6 +58,11 @@ func (m *Map) launchServer() func() {
 		case <-done:
 			return
 		default:
+		}
+
+		info, err := logs.NewInfoStore(db)
+		if err != nil {
+			return
 		}
 
 		rm, err := newServerSideMap(db)
@@ -82,7 +89,19 @@ func (m *Map) launchServer() func() {
 		}()
 
 		// Write addr for other clients.
-		err = m._cfg.writeAddr("http://" + ln.Addr().String())
+		addr := "http://" + ln.Addr().String()
+		err = m._cfg.writeAddr(addr)
+		if err != nil {
+			return
+		}
+
+		// Record launched server.
+		err = info.PutServerLog(logs.ServerLog{
+			Event:     logs.ServerEventLaunched,
+			Addr:      addr,
+			Operator:  clientID,
+			Timestamp: time.Now().UnixNano(),
+		})
 		if err != nil {
 			return
 		}
@@ -94,6 +113,13 @@ func (m *Map) launchServer() func() {
 
 		<-done
 		_ = s.Shutdown(context.Background())
+
+		// Record stopped server.
+		_ = info.PutServerLog(logs.ServerLog{
+			Event:     logs.ServerEventStopped,
+			Operator:  clientID,
+			Timestamp: time.Now().UnixNano(),
+		})
 	}()
 
 	return func() {

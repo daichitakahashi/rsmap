@@ -127,7 +127,7 @@ func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 	}
 
 	// Start server launch process, and set release function.
-	m._stop = m.launchServer()
+	m._stop = m.launchServer(m.clientID)
 
 	return m, nil
 }
@@ -254,11 +254,11 @@ type serverSideMap struct {
 // Create resourceMap for server side.
 // This map reads and updates bbolt.DB directly.
 func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
-	initRecordStore, err := logs.NewRecordStore[logs.InitRecord](db)
+	initRecordStore, err := logs.NewResourceRecordStore[logs.InitRecord](db)
 	if err != nil {
 		return nil, err
 	}
-	acquireRecordStore, err := logs.NewRecordStore[logs.AcquireRecord](db)
+	acquireRecordStore, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
 	if err != nil {
 		return nil, err
 	}

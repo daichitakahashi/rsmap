@@ -14,11 +14,11 @@ import (
 // * timeout for init and acquisition
 
 type initController struct {
-	_kv        logs.RecordStore[logs.InitRecord] // TODO: fix name
+	_kv        logs.ResourceRecordStore[logs.InitRecord] // TODO: fix name
 	_resources sync.Map
 }
 
-func loadInitController(store logs.RecordStore[logs.InitRecord]) (*initController, error) {
+func loadInitController(store logs.ResourceRecordStore[logs.InitRecord]) (*initController, error) {
 	c := &initController{
 		_kv: store,
 	}
@@ -109,11 +109,11 @@ func (c *initController) complete(resourceName, operator string) error {
 
 // Control acquisition status and persistence.
 type acquireController struct {
-	_kv        logs.RecordStore[logs.AcquireRecord]
+	_kv        logs.ResourceRecordStore[logs.AcquireRecord]
 	_resources sync.Map
 }
 
-func loadAcquireController(store logs.RecordStore[logs.AcquireRecord]) (*acquireController, error) {
+func loadAcquireController(store logs.ResourceRecordStore[logs.AcquireRecord]) (*acquireController, error) {
 	c := &acquireController{
 		_kv: store,
 	}
