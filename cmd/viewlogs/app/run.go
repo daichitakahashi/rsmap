@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -44,15 +45,22 @@ func run(filename, operation, resource string) error {
 		return fmt.Errorf("failed to open database: %s", err)
 	}
 
-	var init, acquire bool
-	switch operation {
-	case "init":
-		init = true
-	case "acquire":
-		acquire = true
-	default:
+	var server, init, acquire bool
+	if operation == "" {
+		server = true
 		init = true
 		acquire = true
+	} else {
+		for _, op := range strings.Split(operation, ",") {
+			switch op {
+			case "server":
+				server = true
+			case "init":
+				init = true
+			case "acquire":
+				acquire = true
+			}
+		}
 	}
 
 	if resource == "" {
@@ -85,6 +93,26 @@ func run(filename, operation, resource string) error {
 			rows = append(rows, row{})
 			copy(rows[idx+1:], rows[idx:])
 			rows[idx] = r
+		}
+	}
+
+	if server {
+		store, err := logs.NewInfoStore(db)
+		if err != nil {
+			return err
+		}
+
+		for _, l := range store.ServerRecord().Logs {
+			var data string
+			if l.Event == logs.ServerEventLaunched {
+				data = fmt.Sprintf("addr=%s", l.Addr)
+			}
+			insert(row{
+				ts:        l.Timestamp,
+				operation: "server:" + string(l.Event),
+				operator:  l.Operator,
+				data:      data,
+			})
 		}
 	}
 
@@ -136,7 +164,7 @@ func run(filename, operation, resource string) error {
 	}
 
 	fmt.Printf("Resource identifier: %q\n\n", resource)
-	tbl := table.New("Timestamp", "Operation", "Operator", "Data").
+	tbl := table.New("Time", "Operation", "Operator", "Data").
 		WithHeaderFormatter(
 			color.New(color.FgGreen, color.Underline).SprintfFunc(),
 		).
