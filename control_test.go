@@ -8,6 +8,8 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.uber.org/mock/gomock"
 	"gotest.tools/v3/assert"
+
+	"github.com/daichitakahashi/rsmap/logs"
 )
 
 func TestInitController(t *testing.T) {
@@ -17,10 +19,10 @@ func TestInitController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[initRecord](
+			kv = NewMockkeyValueStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
-			r initRecord
+			r logs.InitRecord
 		)
 		kv.EXPECT().forEach(gomock.Any()).
 			Return(nil).
@@ -76,27 +78,27 @@ func TestInitController(t *testing.T) {
 		assert.Assert(t, !result.try)
 
 		// Check stored logs.
-		assert.DeepEqual(t, r, initRecord{
-			Logs: []initLog{
+		assert.DeepEqual(t, r, logs.InitRecord{
+			Logs: []logs.InitLog{
 				{
-					Event:    initEventStarted,
+					Event:    logs.InitEventStarted,
 					Operator: "alice",
 				}, {
-					Event:    initEventCompleted,
+					Event:    logs.InitEventCompleted,
 					Operator: "alice",
 				},
 			},
-		}, cmpopts.IgnoreFields(initLog{}, "Timestamp"))
+		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
 	})
 
 	t.Run("Consecutive try by same operator should be succeeded", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[initRecord](
+			kv = NewMockkeyValueStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
-			r initRecord
+			r logs.InitRecord
 		)
 		kv.EXPECT().forEach(gomock.Any()).
 			Return(nil).
@@ -122,27 +124,27 @@ func TestInitController(t *testing.T) {
 		assert.Equal(t, try, secondTry)
 
 		// Check stored logs.
-		assert.DeepEqual(t, r, initRecord{
-			Logs: []initLog{
+		assert.DeepEqual(t, r, logs.InitRecord{
+			Logs: []logs.InitLog{
 				{
-					Event:    initEventStarted,
+					Event:    logs.InitEventStarted,
 					Operator: "alice",
 				},
 			},
-		}, cmpopts.IgnoreFields(initLog{}, "Timestamp"))
+		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
 	})
 
 	t.Run("Replay the status that init is in progress", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[initRecord](
+			kv = NewMockkeyValueStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
-			r = initRecord{
-				Logs: []initLog{
+			r = logs.InitRecord{
+				Logs: []logs.InitLog{
 					{
-						Event:     initEventStarted,
+						Event:     logs.InitEventStarted,
 						Operator:  "alice",
 						Timestamp: time.Now().UnixNano(),
 					},
@@ -151,7 +153,7 @@ func TestInitController(t *testing.T) {
 		)
 		// Restore init try by Alice.
 		kv.EXPECT().forEach(gomock.Any()).
-			DoAndReturn(func(f func(string, *initRecord) error) error {
+			DoAndReturn(func(f func(string, *logs.InitRecord) error) error {
 				f("treasure", &r)
 				return nil
 			}).Times(1)
@@ -177,34 +179,34 @@ func TestInitController(t *testing.T) {
 		assert.Assert(t, !try)
 
 		// Check stored logs.
-		assert.DeepEqual(t, r, initRecord{
-			Logs: []initLog{
+		assert.DeepEqual(t, r, logs.InitRecord{
+			Logs: []logs.InitLog{
 				{
-					Event:    initEventStarted,
+					Event:    logs.InitEventStarted,
 					Operator: "alice",
 				}, {
-					Event:    initEventCompleted,
+					Event:    logs.InitEventCompleted,
 					Operator: "alice",
 				},
 			},
-		}, cmpopts.IgnoreFields(initLog{}, "Timestamp"))
+		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
 	})
 
 	t.Run("Replay the status that init is completed", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[initRecord](
+			kv = NewMockkeyValueStore[logs.InitRecord](
 				gomock.NewController(t),
 			)
-			r = initRecord{
-				Logs: []initLog{
+			r = logs.InitRecord{
+				Logs: []logs.InitLog{
 					{
-						Event:     initEventCompleted,
+						Event:     logs.InitEventCompleted,
 						Operator:  "alice",
 						Timestamp: time.Now().UnixNano(),
 					}, {
-						Event:     initEventCompleted,
+						Event:     logs.InitEventCompleted,
 						Operator:  "alice",
 						Timestamp: time.Now().UnixNano(),
 					},
@@ -212,7 +214,7 @@ func TestInitController(t *testing.T) {
 			}
 		)
 		kv.EXPECT().forEach(gomock.Any()).
-			DoAndReturn(func(f func(string, *initRecord) error) error {
+			DoAndReturn(func(f func(string, *logs.InitRecord) error) error {
 				f("treasure", &r)
 				return nil
 			}).Times(1)
@@ -234,23 +236,23 @@ func TestAcquireController(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[acquireRecord](
+			kv = NewMockkeyValueStore[logs.AcquireRecord](
 				gomock.NewController(t),
 			)
-			r *acquireRecord
+			r *logs.AcquireRecord
 		)
 		kv.EXPECT().forEach(gomock.Any()).
 			Return(nil).
 			Times(1)
 		kv.EXPECT().get("treasure").
-			DoAndReturn(func(string) (*acquireRecord, error) {
+			DoAndReturn(func(string) (*logs.AcquireRecord, error) {
 				if r == nil {
 					return nil, errRecordNotFound
 				}
 				return r, nil
 			}).Times(6)
 		kv.EXPECT().set("treasure", gomock.Any()).
-			DoAndReturn(func(_ string, set *acquireRecord) error {
+			DoAndReturn(func(_ string, set *logs.AcquireRecord) error {
 				r = set
 				return nil
 			}).Times(6)
@@ -291,56 +293,56 @@ func TestAcquireController(t *testing.T) {
 		)
 
 		// Check stored logs.
-		assert.DeepEqual(t, *r, acquireRecord{
+		assert.DeepEqual(t, *r, logs.AcquireRecord{
 			Max: 100,
-			Logs: []acquireLog{
+			Logs: []logs.AcquireLog{
 				{
-					Event:    acquireEventAcquired,
+					Event:    logs.AcquireEventAcquired,
 					N:        1,
 					Operator: "alice",
 				}, {
-					Event:    acquireEventAcquired,
+					Event:    logs.AcquireEventAcquired,
 					N:        1,
 					Operator: "bob",
 				}, {
-					Event:    acquireEventReleased,
+					Event:    logs.AcquireEventReleased,
 					Operator: "alice",
 				}, {
-					Event:    acquireEventReleased,
+					Event:    logs.AcquireEventReleased,
 					Operator: "bob",
 				}, {
-					Event:    acquireEventAcquired,
+					Event:    logs.AcquireEventAcquired,
 					N:        100,
 					Operator: "charlie",
 				}, {
-					Event:    acquireEventReleased,
+					Event:    logs.AcquireEventReleased,
 					Operator: "charlie",
 				},
 			},
-		}, cmpopts.IgnoreFields(acquireLog{}, "Timestamp"))
+		}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
 	})
 
 	t.Run("Consecutive acquire and release are succeeds but not recorded logs", func(t *testing.T) {
 		t.Parallel()
 
 		var (
-			kv = NewMockkeyValueStore[acquireRecord](
+			kv = NewMockkeyValueStore[logs.AcquireRecord](
 				gomock.NewController(t),
 			)
-			r *acquireRecord
+			r *logs.AcquireRecord
 		)
 		kv.EXPECT().forEach(gomock.Any()).
 			Return(nil).
 			Times(1)
 		kv.EXPECT().get("treasure").
-			DoAndReturn(func(s string) (*acquireRecord, error) {
+			DoAndReturn(func(s string) (*logs.AcquireRecord, error) {
 				if r == nil {
 					return nil, errRecordNotFound
 				}
 				return r, nil
 			}).Times(2) // Called by acquire and release.
 		kv.EXPECT().set("treasure", gomock.Any()).
-			DoAndReturn(func(s string, set *acquireRecord) error {
+			DoAndReturn(func(s string, set *logs.AcquireRecord) error {
 				r = set
 				return nil
 			}).Times(2)
@@ -367,20 +369,20 @@ func TestAcquireController(t *testing.T) {
 		)
 
 		// Check stored logs.
-		assert.DeepEqual(t, *r, acquireRecord{
+		assert.DeepEqual(t, *r, logs.AcquireRecord{
 			Max: 100,
-			Logs: []acquireLog{
+			Logs: []logs.AcquireLog{
 				{
-					Event:    acquireEventAcquired,
+					Event:    logs.AcquireEventAcquired,
 					N:        100,
 					Operator: "alice",
 				}, {
-					Event:    acquireEventReleased,
+					Event:    logs.AcquireEventReleased,
 					N:        0,
 					Operator: "alice",
 				},
 			},
-		}, cmpopts.IgnoreFields(acquireLog{}, "Timestamp"))
+		}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
 	})
 
 	t.Run("Replay acquisition status correctly", func(t *testing.T) {
@@ -388,32 +390,32 @@ func TestAcquireController(t *testing.T) {
 
 		var (
 			mc             = gomock.NewController(t)
-			kv             = NewMockkeyValueStore[acquireRecord](mc)
-			treasureRecord = &acquireRecord{
+			kv             = NewMockkeyValueStore[logs.AcquireRecord](mc)
+			treasureRecord = &logs.AcquireRecord{
 				Max: 10,
-				Logs: []acquireLog{
+				Logs: []logs.AcquireLog{
 					{
-						Event:     acquireEventAcquired,
+						Event:     logs.AcquireEventAcquired,
 						N:         10,
 						Operator:  "alice",
 						Timestamp: time.Now().UnixNano(),
 					}, {
-						Event:     acquireEventReleased,
+						Event:     logs.AcquireEventReleased,
 						Operator:  "alice",
 						Timestamp: time.Now().UnixNano(),
 					}, {
-						Event:     acquireEventAcquired,
+						Event:     logs.AcquireEventAcquired,
 						N:         1,
 						Operator:  "alice",
 						Timestamp: 0,
 					},
 				},
 			}
-			preciousRecord = &acquireRecord{
+			preciousRecord = &logs.AcquireRecord{
 				Max: 200,
-				Logs: []acquireLog{
+				Logs: []logs.AcquireLog{
 					{
-						Event:     acquireEventAcquired,
+						Event:     logs.AcquireEventAcquired,
 						N:         200,
 						Operator:  "alice",
 						Timestamp: time.Now().UnixNano(),
@@ -423,8 +425,8 @@ func TestAcquireController(t *testing.T) {
 		)
 		// Replay stored operations.
 		kv.EXPECT().forEach(gomock.Any()).
-			DoAndReturn(func(f func(string, *acquireRecord) error) error {
-				records := map[string]*acquireRecord{
+			DoAndReturn(func(f func(string, *logs.AcquireRecord) error) error {
+				records := map[string]*logs.AcquireRecord{
 					"treasure": treasureRecord,
 					"precious": preciousRecord,
 				}
@@ -465,27 +467,27 @@ func TestAcquireController(t *testing.T) {
 			)
 
 			// Check stored logs.
-			assert.DeepEqual(t, *treasureRecord, acquireRecord{
+			assert.DeepEqual(t, *treasureRecord, logs.AcquireRecord{
 				Max: 10,
-				Logs: []acquireLog{
+				Logs: []logs.AcquireLog{
 					{
-						Event:    acquireEventAcquired,
+						Event:    logs.AcquireEventAcquired,
 						N:        10,
 						Operator: "alice",
 					}, {
-						Event:    acquireEventReleased,
+						Event:    logs.AcquireEventReleased,
 						Operator: "alice",
 					}, {
-						Event:    acquireEventAcquired,
+						Event:    logs.AcquireEventAcquired,
 						N:        1,
 						Operator: "alice",
 					}, {
-						Event:    acquireEventAcquired,
+						Event:    logs.AcquireEventAcquired,
 						N:        1,
 						Operator: "bob",
 					},
 				},
-			}, cmpopts.IgnoreFields(acquireLog{}, "Timestamp"))
+			}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
 		}
 
 		{
@@ -516,23 +518,23 @@ func TestAcquireController(t *testing.T) {
 			)
 
 			// Check stored logs.
-			assert.DeepEqual(t, *preciousRecord, acquireRecord{
+			assert.DeepEqual(t, *preciousRecord, logs.AcquireRecord{
 				Max: 200,
-				Logs: []acquireLog{
+				Logs: []logs.AcquireLog{
 					{
-						Event:    acquireEventAcquired,
+						Event:    logs.AcquireEventAcquired,
 						N:        200,
 						Operator: "alice",
 					}, {
-						Event:    acquireEventReleased,
+						Event:    logs.AcquireEventReleased,
 						Operator: "alice",
 					}, {
-						Event:    acquireEventAcquired,
+						Event:    logs.AcquireEventAcquired,
 						N:        1,
 						Operator: "bob",
 					},
 				},
-			}, cmpopts.IgnoreFields(acquireLog{}, "Timestamp"))
+			}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
 		}
 	})
 }

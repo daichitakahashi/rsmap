@@ -14,6 +14,8 @@ import (
 	"github.com/lestrrat-go/backoff/v2"
 	"github.com/lestrrat-go/option"
 	"go.etcd.io/bbolt"
+
+	"github.com/daichitakahashi/rsmap/logs"
 )
 
 type (
@@ -71,7 +73,7 @@ func WithHTTPClient(c *http.Client) *NewOption {
 // In almost cases, following code can be helpful.
 //
 //	p,  _ := exec.Command("go", "mod", "GOMOD").Output() // Get file path of "go.mod".
-//	m, _ := rsmap.New(filepath.Join(filepath.Dir(string(p)), ".rsmap"))
+//	m, _ := rsmap.New(filepath.Join(filepath.Dir(strings.TrimSpace(string(p))), ".rsmap"))
 func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 	// Create directory is not exists.
 	if err := os.MkdirAll(rsmapDir, 0755); err != nil {
@@ -232,11 +234,11 @@ type serverSideMap struct {
 // Create resourceMap for server side.
 // This map reads and updates bbolt.DB directly.
 func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
-	initRecordStore, err := newRecordStore[initRecord](db)
+	initRecordStore, err := newRecordStore[logs.InitRecord](db)
 	if err != nil {
 		return nil, err
 	}
-	acquireRecordStore, err := newRecordStore[acquireRecord](db)
+	acquireRecordStore, err := newRecordStore[logs.AcquireRecord](db)
 	if err != nil {
 		return nil, err
 	}
@@ -275,21 +277,21 @@ func (m *serverSideMap) release(_ context.Context, resourceName, operator string
 var _ resourceMap = (*serverSideMap)(nil)
 
 // keyValueStore implementation for serverSideMap.
-type recordStore[T initRecord | acquireRecord] struct {
+type recordStore[T logs.InitRecord | logs.AcquireRecord] struct {
 	_bucketName []byte
 	_db         *bbolt.DB
 }
 
-func newRecordStore[T initRecord | acquireRecord](db *bbolt.DB) (*recordStore[T], error) {
+func newRecordStore[T logs.InitRecord | logs.AcquireRecord](db *bbolt.DB) (*recordStore[T], error) {
 	var (
 		t          T
 		v          any = t
 		bucketName []byte
 	)
 	switch v.(type) {
-	case initRecord:
+	case logs.InitRecord:
 		bucketName = []byte("init")
-	case acquireRecord:
+	case logs.AcquireRecord:
 		bucketName = []byte("acquire")
 	}
 
@@ -345,5 +347,5 @@ func (s *recordStore[T]) set(name string, obj *T) error {
 	})
 }
 
-var _ keyValueStore[initRecord] = (*recordStore[initRecord])(nil)
-var _ keyValueStore[acquireRecord] = (*recordStore[acquireRecord])(nil)
+var _ keyValueStore[logs.InitRecord] = (*recordStore[logs.InitRecord])(nil)
+var _ keyValueStore[logs.AcquireRecord] = (*recordStore[logs.AcquireRecord])(nil)

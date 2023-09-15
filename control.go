@@ -5,18 +5,13 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"github.com/daichitakahashi/rsmap/logs"
 )
 
 // TODO
 // * status for init failure
 // * timeout for init and acquisition
-
-type initEvent string
-
-const (
-	initEventStarted   initEvent = "started"
-	initEventCompleted initEvent = "completed"
-)
 
 var errRecordNotFound = errors.New("record not found on key value store")
 
@@ -29,33 +24,23 @@ type (
 
 	// Control init status and persistence.
 	initController struct {
-		_kv        keyValueStore[initRecord]
+		_kv        keyValueStore[logs.InitRecord]
 		_resources sync.Map
-	}
-
-	initRecord struct {
-		Logs []initLog `json:"logs"`
-	}
-
-	initLog struct {
-		Event     initEvent `json:"event"`
-		Operator  string    `json:"operator"`
-		Timestamp int64     `json:"ts,string"`
 	}
 )
 
-func loadInitController(store keyValueStore[initRecord]) (*initController, error) {
+func loadInitController(store keyValueStore[logs.InitRecord]) (*initController, error) {
 	c := &initController{
 		_kv: store,
 	}
-	err := c._kv.forEach(func(name string, obj *initRecord) error {
+	err := c._kv.forEach(func(name string, obj *logs.InitRecord) error {
 		// Get init status and operator.
 		completed, operator := func() (bool, string) {
 			if len(obj.Logs) == 0 {
 				return false, "" // Basically, it's impossible path.
 			}
 			last := obj.Logs[len(obj.Logs)-1]
-			return last.Event == initEventCompleted, last.Operator
+			return last.Event == logs.InitEventCompleted, last.Operator
 		}()
 
 		ctl := newInitCtl(completed)
@@ -94,12 +79,12 @@ func (c *initController) tryInit(ctx context.Context, resourceName, operator str
 		// Update data on key value store.
 		r, err := c._kv.get(resourceName)
 		if errors.Is(err, errRecordNotFound) {
-			r = &initRecord{}
+			r = &logs.InitRecord{}
 		} else if err != nil {
 			return err
 		}
-		r.Logs = append(r.Logs, initLog{
-			Event:     initEventStarted,
+		r.Logs = append(r.Logs, logs.InitLog{
+			Event:     logs.InitEventStarted,
 			Operator:  operator,
 			Timestamp: time.Now().UnixNano(),
 		})
@@ -124,8 +109,8 @@ func (c *initController) complete(resourceName, operator string) error {
 		if err != nil {
 			return err
 		}
-		r.Logs = append(r.Logs, initLog{
-			Event:     initEventCompleted,
+		r.Logs = append(r.Logs, logs.InitLog{
+			Event:     logs.InitEventCompleted,
 			Operator:  operator,
 			Timestamp: time.Now().UnixNano(),
 		})
@@ -133,50 +118,29 @@ func (c *initController) complete(resourceName, operator string) error {
 	})
 }
 
-type acquireEvent string
+// Control acquisition status and persistence.
+type acquireController struct {
+	_kv        keyValueStore[logs.AcquireRecord]
+	_resources sync.Map
+}
 
-const (
-	acquireEventAcquired acquireEvent = "acquired"
-	acquireEventReleased acquireEvent = "released"
-)
-
-type (
-	// Control acquisition status and persistence.
-	acquireController struct {
-		_kv        keyValueStore[acquireRecord]
-		_resources sync.Map
-	}
-
-	acquireRecord struct {
-		Max  int64        `json:"max,string"`
-		Logs []acquireLog `json:"logs"`
-	}
-
-	acquireLog struct {
-		Event     acquireEvent `json:"event"`
-		N         int64        `json:"n,string,omitempty"`
-		Operator  string       `json:"operator"`
-		Timestamp int64        `json:"ts,string"`
-	}
-)
-
-func loadAcquireController(store keyValueStore[acquireRecord]) (*acquireController, error) {
+func loadAcquireController(store keyValueStore[logs.AcquireRecord]) (*acquireController, error) {
 	c := &acquireController{
 		_kv: store,
 	}
 
-	err := store.forEach(func(name string, obj *acquireRecord) error {
+	err := store.forEach(func(name string, obj *logs.AcquireRecord) error {
 		acquired := map[string]int64{}
 		// Replay stored acquisitions of the resource.
 		for _, log := range obj.Logs {
 			switch log.Event {
-			case acquireEventAcquired:
+			case logs.AcquireEventAcquired:
 				// Consecutive acquisition is not recorded.
 				// So, we can skip the check of existing value.
 				//
 				// See: `(*acquireCtl).acquire()`
 				acquired[log.Operator] = log.N
-			case acquireEventReleased:
+			case logs.AcquireEventReleased:
 				// We assume that acquisition log is already processed.
 				delete(acquired, log.Operator)
 			}
@@ -209,14 +173,14 @@ func (c *acquireController) acquire(ctx context.Context, resourceName, operator 
 
 	r, err := c._kv.get(resourceName)
 	if errors.Is(err, errRecordNotFound) {
-		r = &acquireRecord{
+		r = &logs.AcquireRecord{
 			Max: max,
 		}
 	} else if err != nil {
 		return err
 	}
-	r.Logs = append(r.Logs, acquireLog{
-		Event:     acquireEventAcquired,
+	r.Logs = append(r.Logs, logs.AcquireLog{
+		Event:     logs.AcquireEventAcquired,
 		N:         n,
 		Operator:  operator,
 		Timestamp: time.Now().UnixNano(),
@@ -240,8 +204,8 @@ func (c *acquireController) release(resourceName, operator string) error {
 	if err != nil {
 		return err
 	}
-	r.Logs = append(r.Logs, acquireLog{
-		Event:     acquireEventReleased,
+	r.Logs = append(r.Logs, logs.AcquireLog{
+		Event:     logs.AcquireEventReleased,
 		N:         0,
 		Operator:  operator,
 		Timestamp: time.Now().UnixNano(),
