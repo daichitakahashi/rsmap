@@ -16,6 +16,8 @@ import (
 	"github.com/lestrrat-go/backoff/v2"
 	"go.etcd.io/bbolt"
 	"gotest.tools/v3/assert"
+
+	"github.com/daichitakahashi/rsmap/logs"
 )
 
 type countTransport struct {
@@ -216,7 +218,7 @@ func TestRecordStore(t *testing.T) {
 	db, err := bbolt.Open(filepath.Join(dir, "records.db"), 0644, nil)
 	assert.NilError(t, err)
 
-	store, err := newRecordStore[initRecord](db)
+	store, err := newRecordStore[logs.InitRecord](db)
 	assert.NilError(t, err)
 
 	// Record is not stored yet.
@@ -226,10 +228,10 @@ func TestRecordStore(t *testing.T) {
 
 	// Store record.
 	assert.NilError(t,
-		store.set("treasure", &initRecord{
-			Logs: []initLog{
+		store.set("treasure", &logs.InitRecord{
+			Logs: []logs.InitLog{
 				{
-					Event:     initEventStarted,
+					Event:     logs.InitEventStarted,
 					Operator:  "alice",
 					Timestamp: math.MaxInt64,
 				},
@@ -240,10 +242,10 @@ func TestRecordStore(t *testing.T) {
 	// Get stored record.
 	got, err = store.get("treasure")
 	assert.NilError(t, err)
-	assert.DeepEqual(t, *got, initRecord{
-		Logs: []initLog{
+	assert.DeepEqual(t, *got, logs.InitRecord{
+		Logs: []logs.InitLog{
 			{
-				Event:     initEventStarted,
+				Event:     logs.InitEventStarted,
 				Operator:  "alice",
 				Timestamp: math.MaxInt64, // Check serialization for large number.
 			},
@@ -252,14 +254,14 @@ func TestRecordStore(t *testing.T) {
 
 	// Store another record.
 	assert.NilError(t,
-		store.set("precious", &initRecord{
-			Logs: []initLog{
+		store.set("precious", &logs.InitRecord{
+			Logs: []logs.InitLog{
 				{
-					Event:     initEventStarted,
+					Event:     logs.InitEventStarted,
 					Operator:  "bob",
 					Timestamp: 1694060338,
 				}, {
-					Event:     initEventCompleted,
+					Event:     logs.InitEventCompleted,
 					Operator:  "bob",
 					Timestamp: 1694060381,
 				},
@@ -268,26 +270,26 @@ func TestRecordStore(t *testing.T) {
 	)
 
 	// Iterate records using forEach.
-	checkTreasure := mustBeCalledOnce(t, func(t *testing.T, got *initRecord) {
-		assert.DeepEqual(t, *got, initRecord{
-			Logs: []initLog{
+	checkTreasure := mustBeCalledOnce(t, func(t *testing.T, got *logs.InitRecord) {
+		assert.DeepEqual(t, *got, logs.InitRecord{
+			Logs: []logs.InitLog{
 				{
-					Event:     initEventStarted,
+					Event:     logs.InitEventStarted,
 					Operator:  "alice",
 					Timestamp: math.MaxInt64,
 				},
 			},
 		})
 	})
-	checkPrecious := mustBeCalledOnce(t, func(t *testing.T, got *initRecord) {
-		assert.DeepEqual(t, *got, initRecord{
-			Logs: []initLog{
+	checkPrecious := mustBeCalledOnce(t, func(t *testing.T, got *logs.InitRecord) {
+		assert.DeepEqual(t, *got, logs.InitRecord{
+			Logs: []logs.InitLog{
 				{
-					Event:     initEventStarted,
+					Event:     logs.InitEventStarted,
 					Operator:  "bob",
 					Timestamp: 1694060338,
 				}, {
-					Event:     initEventCompleted,
+					Event:     logs.InitEventCompleted,
 					Operator:  "bob",
 					Timestamp: 1694060381,
 				},
@@ -295,7 +297,7 @@ func TestRecordStore(t *testing.T) {
 		})
 	})
 	assert.NilError(t,
-		store.forEach(func(name string, obj *initRecord) error {
+		store.forEach(func(name string, obj *logs.InitRecord) error {
 			switch name {
 			case "treasure":
 				checkTreasure(t, obj)
