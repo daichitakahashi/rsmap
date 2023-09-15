@@ -3,7 +3,6 @@ package rsmap
 import (
 	"context"
 	"errors"
-	"math"
 	"net"
 	"net/http"
 	"os"
@@ -16,9 +15,9 @@ import (
 	"github.com/lestrrat-go/backoff/v2"
 	"go.etcd.io/bbolt"
 	"gotest.tools/v3/assert"
-
-	"github.com/daichitakahashi/rsmap/logs"
 )
+
+var background = context.Background()
 
 type countTransport struct {
 	transport     http.RoundTripper
@@ -218,104 +217,4 @@ func TestMap_Resource(t *testing.T) {
 		// Check count of init call.
 		assert.Assert(t, count == 1)
 	})
-}
-
-func TestRecordStore(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	db, err := bbolt.Open(filepath.Join(dir, "records.db"), 0644, nil)
-	assert.NilError(t, err)
-
-	store, err := newRecordStore[logs.InitRecord](db)
-	assert.NilError(t, err)
-
-	// Record is not stored yet.
-	got, err := store.get("treasure")
-	assert.ErrorIs(t, err, errRecordNotFound)
-	assert.Assert(t, got == nil)
-
-	// Store record.
-	assert.NilError(t,
-		store.set("treasure", &logs.InitRecord{
-			Logs: []logs.InitLog{
-				{
-					Event:     logs.InitEventStarted,
-					Operator:  "alice",
-					Timestamp: math.MaxInt64,
-				},
-			},
-		}),
-	)
-
-	// Get stored record.
-	got, err = store.get("treasure")
-	assert.NilError(t, err)
-	assert.DeepEqual(t, *got, logs.InitRecord{
-		Logs: []logs.InitLog{
-			{
-				Event:     logs.InitEventStarted,
-				Operator:  "alice",
-				Timestamp: math.MaxInt64, // Check serialization for large number.
-			},
-		},
-	})
-
-	// Store another record.
-	assert.NilError(t,
-		store.set("precious", &logs.InitRecord{
-			Logs: []logs.InitLog{
-				{
-					Event:     logs.InitEventStarted,
-					Operator:  "bob",
-					Timestamp: 1694060338,
-				}, {
-					Event:     logs.InitEventCompleted,
-					Operator:  "bob",
-					Timestamp: 1694060381,
-				},
-			},
-		}),
-	)
-
-	// Iterate records using forEach.
-	checkTreasure := mustBeCalledOnce(t, func(t *testing.T, got *logs.InitRecord) {
-		assert.DeepEqual(t, *got, logs.InitRecord{
-			Logs: []logs.InitLog{
-				{
-					Event:     logs.InitEventStarted,
-					Operator:  "alice",
-					Timestamp: math.MaxInt64,
-				},
-			},
-		})
-	})
-	checkPrecious := mustBeCalledOnce(t, func(t *testing.T, got *logs.InitRecord) {
-		assert.DeepEqual(t, *got, logs.InitRecord{
-			Logs: []logs.InitLog{
-				{
-					Event:     logs.InitEventStarted,
-					Operator:  "bob",
-					Timestamp: 1694060338,
-				}, {
-					Event:     logs.InitEventCompleted,
-					Operator:  "bob",
-					Timestamp: 1694060381,
-				},
-			},
-		})
-	})
-	assert.NilError(t,
-		store.forEach(func(name string, obj *logs.InitRecord) error {
-			switch name {
-			case "treasure":
-				checkTreasure(t, obj)
-			case "precious":
-				checkPrecious(t, obj)
-			default:
-				t.Fatalf("unexpected record found: %#v", obj)
-			}
-			return nil
-		}),
-	)
 }
