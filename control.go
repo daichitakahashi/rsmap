@@ -14,15 +14,15 @@ import (
 // * timeout for init and acquisition
 
 type initController struct {
-	_kv        logs.ResourceRecordStore[logs.InitRecord] // TODO: fix name
+	_store     logs.ResourceRecordStore[logs.InitRecord]
 	_resources sync.Map
 }
 
 func loadInitController(store logs.ResourceRecordStore[logs.InitRecord]) (*initController, error) {
 	c := &initController{
-		_kv: store,
+		_store: store,
 	}
-	err := c._kv.ForEach(func(name string, obj *logs.InitRecord) error {
+	err := c._store.ForEach(func(name string, obj *logs.InitRecord) error {
 		// Get init status and operator.
 		completed, operator := func() (bool, string) {
 			if len(obj.Logs) == 0 {
@@ -66,18 +66,13 @@ func (c *initController) tryInit(ctx context.Context, resourceName, operator str
 		}
 
 		// Update data on key value store.
-		r, err := c._kv.Get(resourceName)
-		if errors.Is(err, logs.ErrRecordNotFound) {
-			r = &logs.InitRecord{}
-		} else if err != nil {
-			return err
-		}
-		r.Logs = append(r.Logs, logs.InitLog{
-			Event:     logs.InitEventStarted,
-			Operator:  operator,
-			Timestamp: time.Now().UnixNano(),
+		return c._store.Put(resourceName, func(r *logs.InitRecord, _ bool) {
+			r.Logs = append(r.Logs, logs.InitLog{
+				Event:     logs.InitEventStarted,
+				Operator:  operator,
+				Timestamp: time.Now().UnixNano(),
+			})
 		})
-		return c._kv.Set(resourceName, r)
 	})
 	if err != nil {
 		return false, err
@@ -94,16 +89,13 @@ func (c *initController) complete(resourceName, operator string) error {
 	ctl := v.(*initCtl)
 
 	return ctl.complete(operator, func() error {
-		r, err := c._kv.Get(resourceName)
-		if err != nil {
-			return err
-		}
-		r.Logs = append(r.Logs, logs.InitLog{
-			Event:     logs.InitEventCompleted,
-			Operator:  operator,
-			Timestamp: time.Now().UnixNano(),
+		return c._store.Put(resourceName, func(r *logs.InitRecord, _ bool) {
+			r.Logs = append(r.Logs, logs.InitLog{
+				Event:     logs.InitEventCompleted,
+				Operator:  operator,
+				Timestamp: time.Now().UnixNano(),
+			})
 		})
-		return c._kv.Set(resourceName, r)
 	})
 }
 
@@ -160,21 +152,18 @@ func (c *acquireController) acquire(ctx context.Context, resourceName, operator 
 		return nil
 	}
 
-	r, err := c._kv.Get(resourceName)
-	if errors.Is(err, logs.ErrRecordNotFound) {
-		r = &logs.AcquireRecord{
-			Max: max,
+	return c._kv.Put(resourceName, func(r *logs.AcquireRecord, update bool) {
+		// Initial acquisition.
+		if !update {
+			r.Max = max
 		}
-	} else if err != nil {
-		return err
-	}
-	r.Logs = append(r.Logs, logs.AcquireLog{
-		Event:     logs.AcquireEventAcquired,
-		N:         n,
-		Operator:  operator,
-		Timestamp: time.Now().UnixNano(),
+		r.Logs = append(r.Logs, logs.AcquireLog{
+			Event:     logs.AcquireEventAcquired,
+			N:         n,
+			Operator:  operator,
+			Timestamp: time.Now().UnixNano(),
+		})
 	})
-	return c._kv.Set(resourceName, r)
 }
 
 func (c *acquireController) release(resourceName, operator string) error {
@@ -189,15 +178,12 @@ func (c *acquireController) release(resourceName, operator string) error {
 		return nil
 	}
 
-	r, err := c._kv.Get(resourceName)
-	if err != nil {
-		return err
-	}
-	r.Logs = append(r.Logs, logs.AcquireLog{
-		Event:     logs.AcquireEventReleased,
-		N:         0,
-		Operator:  operator,
-		Timestamp: time.Now().UnixNano(),
+	return c._kv.Put(resourceName, func(r *logs.AcquireRecord, _ bool) {
+		r.Logs = append(r.Logs, logs.AcquireLog{
+			Event:     logs.AcquireEventReleased,
+			N:         0,
+			Operator:  operator,
+			Timestamp: time.Now().UnixNano(),
+		})
 	})
-	return c._kv.Set(resourceName, r)
 }

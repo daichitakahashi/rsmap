@@ -13,7 +13,6 @@ require (
 	github.com/rodaine/table v1.1.0
 	github.com/spf13/pflag v1.0.5
 	go.etcd.io/bbolt v1.3.7
-	go.uber.org/mock v0.2.0
 	golang.org/x/sync v0.3.0
 	google.golang.org/protobuf v1.31.0
 	gotest.tools/v3 v3.4.0

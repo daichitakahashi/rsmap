@@ -121,14 +121,15 @@ func TestResourceRecordStore(t *testing.T) {
 
 	// Store record.
 	assert.NilError(t,
-		store.Set("treasure", &InitRecord{
-			Logs: []InitLog{
-				{
-					Event:     InitEventStarted,
-					Operator:  "alice",
-					Timestamp: math.MaxInt64,
-				},
-			},
+		store.Put("treasure", func(r *InitRecord, update bool) {
+			// This is a new record.
+			assert.Assert(t, !update)
+
+			r.Logs = append(r.Logs, InitLog{
+				Event:     InitEventStarted,
+				Operator:  "alice",
+				Timestamp: math.MaxInt64,
+			})
 		}),
 	)
 
@@ -146,21 +147,25 @@ func TestResourceRecordStore(t *testing.T) {
 	})
 
 	// Store another record.
-	assert.NilError(t,
-		store.Set("precious", &InitRecord{
-			Logs: []InitLog{
-				{
-					Event:     InitEventStarted,
-					Operator:  "bob",
-					Timestamp: 1694765621790751000,
-				}, {
-					Event:     InitEventCompleted,
-					Operator:  "bob",
-					Timestamp: 1694765637968901000,
-				},
-			},
-		}),
-	)
+	assert.NilError(t, store.Put("precious", func(r *InitRecord, update bool) {
+		assert.Assert(t, !update)
+
+		r.Logs = append(r.Logs, InitLog{
+			Event:     InitEventStarted,
+			Operator:  "bob",
+			Timestamp: 1694765621790751000,
+		})
+	}))
+	assert.NilError(t, store.Put("precious", func(r *InitRecord, update bool) {
+		// Update record.
+		assert.Assert(t, update)
+
+		r.Logs = append(r.Logs, InitLog{
+			Event:     InitEventCompleted,
+			Operator:  "bob",
+			Timestamp: 1694765637968901000,
+		})
+	}))
 
 	// Iterate records using forEach.
 	checkTreasure := mustBeCalledOnce(t, func(t *testing.T, got *InitRecord) {
