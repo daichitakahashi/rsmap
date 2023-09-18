@@ -2,15 +2,15 @@ package rsmap
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"go.uber.org/mock/gomock"
+	"go.etcd.io/bbolt"
 	"gotest.tools/v3/assert"
 
 	"github.com/daichitakahashi/rsmap/logs"
-	"github.com/daichitakahashi/rsmap/logs/logstest"
 )
 
 func asyncResult[T any](fn func() T) (result <-chan T) {
@@ -27,23 +27,16 @@ func TestInitController(t *testing.T) {
 	t.Run("Init will be performed only once", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			kv = logstest.NewMockResourceRecordStore[logs.InitRecord](
-				gomock.NewController(t),
-			)
-			r logs.InitRecord
-		)
-		kv.EXPECT().ForEach(gomock.Any()).
-			Return(nil).
-			Times(1)
-		kv.EXPECT().Get("treasure").
-			Return(&r, nil).
-			Times(2) // Called by tryInit and complete.
-		kv.EXPECT().Set("treasure", &r).
-			Return(nil).
-			Times(2) // Called by tryInit and complete.
+		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
 
-		ctl, err := loadInitController(kv)
+		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		assert.NilError(t, err)
+
+		ctl, err := loadInitController(store)
 		assert.NilError(t, err)
 
 		// Start init by Alice.
@@ -87,7 +80,9 @@ func TestInitController(t *testing.T) {
 		assert.Assert(t, !result.try)
 
 		// Check stored logs.
-		assert.DeepEqual(t, r, logs.InitRecord{
+		r, err := store.Get("treasure")
+		assert.NilError(t, err)
+		assert.DeepEqual(t, *r, logs.InitRecord{
 			Logs: []logs.InitLog{
 				{
 					Event:    logs.InitEventStarted,
@@ -103,23 +98,16 @@ func TestInitController(t *testing.T) {
 	t.Run("Consecutive try by same operator should be succeeded", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			kv = logstest.NewMockResourceRecordStore[logs.InitRecord](
-				gomock.NewController(t),
-			)
-			r logs.InitRecord
-		)
-		kv.EXPECT().ForEach(gomock.Any()).
-			Return(nil).
-			Times(1)
-		kv.EXPECT().Get("treasure").
-			Return(&r, nil).
-			Times(1)
-		kv.EXPECT().Set("treasure", &r).
-			Return(nil).
-			Times(1)
+		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
 
-		ctl, err := loadInitController(kv)
+		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		assert.NilError(t, err)
+
+		ctl, err := loadInitController(store)
 		assert.NilError(t, err)
 
 		// Start init by Alice.
@@ -133,7 +121,9 @@ func TestInitController(t *testing.T) {
 		assert.Equal(t, try, secondTry)
 
 		// Check stored logs.
-		assert.DeepEqual(t, r, logs.InitRecord{
+		r, err := store.Get("treasure")
+		assert.NilError(t, err)
+		assert.DeepEqual(t, *r, logs.InitRecord{
 			Logs: []logs.InitLog{
 				{
 					Event:    logs.InitEventStarted,
@@ -146,30 +136,27 @@ func TestInitController(t *testing.T) {
 	t.Run("Replay the status that init is in progress", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			kv = logstest.NewMockResourceRecordStore[logs.InitRecord](
-				gomock.NewController(t),
-			)
-			r = logs.InitRecord{
-				Logs: []logs.InitLog{
-					{
-						Event:     logs.InitEventStarted,
-						Operator:  "alice",
-						Timestamp: time.Now().UnixNano(),
-					},
-				},
-			}
-		)
-		// Restore init try by Alice.
-		kv.EXPECT().ForEach(gomock.Any()).
-			DoAndReturn(func(f func(string, *logs.InitRecord) error) error {
-				f("treasure", &r)
-				return nil
-			}).Times(1)
-		kv.EXPECT().Get("treasure").Return(&r, nil).Times(1)
-		kv.EXPECT().Set("treasure", &r).Return(nil).Times(1)
+		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
 
-		ctl, err := loadInitController(kv)
+		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		assert.NilError(t, err)
+
+		// Setup situation that init has already started.
+		assert.NilError(t,
+			store.Put("treasure", func(r *logs.InitRecord, _ bool) {
+				r.Logs = append(r.Logs, logs.InitLog{
+					Event:     logs.InitEventStarted,
+					Operator:  "alice",
+					Timestamp: time.Now().UnixNano(),
+				})
+			}),
+		)
+
+		ctl, err := loadInitController(store)
 		assert.NilError(t, err)
 
 		// Bob's try, timed out.
@@ -188,7 +175,9 @@ func TestInitController(t *testing.T) {
 		assert.Assert(t, !try)
 
 		// Check stored logs.
-		assert.DeepEqual(t, r, logs.InitRecord{
+		r, err := store.Get("treasure")
+		assert.NilError(t, err)
+		assert.DeepEqual(t, *r, logs.InitRecord{
 			Logs: []logs.InitLog{
 				{
 					Event:    logs.InitEventStarted,
@@ -204,12 +193,19 @@ func TestInitController(t *testing.T) {
 	t.Run("Replay the status that init is completed", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			kv = logstest.NewMockResourceRecordStore[logs.InitRecord](
-				gomock.NewController(t),
-			)
-			r = logs.InitRecord{
-				Logs: []logs.InitLog{
+		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
+
+		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		assert.NilError(t, err)
+
+		// Setup situation that init has already completed.
+		assert.NilError(t,
+			store.Put("treasure", func(r *logs.InitRecord, _ bool) {
+				r.Logs = append(r.Logs, []logs.InitLog{
 					{
 						Event:     logs.InitEventCompleted,
 						Operator:  "alice",
@@ -218,17 +214,11 @@ func TestInitController(t *testing.T) {
 						Event:     logs.InitEventCompleted,
 						Operator:  "alice",
 						Timestamp: time.Now().UnixNano(),
-					},
-				},
-			}
+					}}...)
+			}),
 		)
-		kv.EXPECT().ForEach(gomock.Any()).
-			DoAndReturn(func(f func(string, *logs.InitRecord) error) error {
-				f("treasure", &r)
-				return nil
-			}).Times(1)
 
-		ctl, err := loadInitController(kv)
+		ctl, err := loadInitController(store)
 		assert.NilError(t, err)
 
 		// Bob tries init, but already completed by Alice.
@@ -244,29 +234,16 @@ func TestAcquireController(t *testing.T) {
 	t.Run("Lock works fine and logs are preserved correctly", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			kv = logstest.NewMockResourceRecordStore[logs.AcquireRecord](
-				gomock.NewController(t),
-			)
-			r *logs.AcquireRecord
-		)
-		kv.EXPECT().ForEach(gomock.Any()).
-			Return(nil).
-			Times(1)
-		kv.EXPECT().Get("treasure").
-			DoAndReturn(func(string) (*logs.AcquireRecord, error) {
-				if r == nil {
-					return nil, logs.ErrRecordNotFound
-				}
-				return r, nil
-			}).Times(6)
-		kv.EXPECT().Set("treasure", gomock.Any()).
-			DoAndReturn(func(_ string, set *logs.AcquireRecord) error {
-				r = set
-				return nil
-			}).Times(6)
+		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
 
-		ctl, err := loadAcquireController(kv)
+		store, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
+		assert.NilError(t, err)
+
+		ctl, err := loadAcquireController(store)
 		assert.NilError(t, err)
 
 		// Acquire shared lock by Alice and Bob.
@@ -302,6 +279,8 @@ func TestAcquireController(t *testing.T) {
 		)
 
 		// Check stored logs.
+		r, err := store.Get("treasure")
+		assert.NilError(t, err)
 		assert.DeepEqual(t, *r, logs.AcquireRecord{
 			Max: 100,
 			Logs: []logs.AcquireLog{
@@ -334,29 +313,16 @@ func TestAcquireController(t *testing.T) {
 	t.Run("Consecutive acquire and release are succeeds but not recorded logs", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			kv = logstest.NewMockResourceRecordStore[logs.AcquireRecord](
-				gomock.NewController(t),
-			)
-			r *logs.AcquireRecord
-		)
-		kv.EXPECT().ForEach(gomock.Any()).
-			Return(nil).
-			Times(1)
-		kv.EXPECT().Get("treasure").
-			DoAndReturn(func(s string) (*logs.AcquireRecord, error) {
-				if r == nil {
-					return nil, logs.ErrRecordNotFound
-				}
-				return r, nil
-			}).Times(2) // Called by acquire and release.
-		kv.EXPECT().Set("treasure", gomock.Any()).
-			DoAndReturn(func(s string, set *logs.AcquireRecord) error {
-				r = set
-				return nil
-			}).Times(2)
+		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
 
-		ctl, err := loadAcquireController(kv)
+		store, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
+		assert.NilError(t, err)
+
+		ctl, err := loadAcquireController(store)
 		assert.NilError(t, err)
 
 		// First acquisition.
@@ -378,6 +344,8 @@ func TestAcquireController(t *testing.T) {
 		)
 
 		// Check stored logs.
+		r, err := store.Get("treasure")
+		assert.NilError(t, err)
 		assert.DeepEqual(t, *r, logs.AcquireRecord{
 			Max: 100,
 			Logs: []logs.AcquireLog{
@@ -397,12 +365,20 @@ func TestAcquireController(t *testing.T) {
 	t.Run("Replay acquisition status correctly", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			mc             = gomock.NewController(t)
-			kv             = logstest.NewMockResourceRecordStore[logs.AcquireRecord](mc)
-			treasureRecord = &logs.AcquireRecord{
-				Max: 10,
-				Logs: []logs.AcquireLog{
+		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
+
+		store, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
+		assert.NilError(t, err)
+
+		// Set up acquisition status.
+		assert.NilError(t,
+			store.Put("treasure", func(r *logs.AcquireRecord, _ bool) {
+				r.Max = 10
+				r.Logs = append(r.Logs, []logs.AcquireLog{
 					{
 						Event:     logs.AcquireEventAcquired,
 						N:         10,
@@ -418,45 +394,28 @@ func TestAcquireController(t *testing.T) {
 						Operator:  "alice",
 						Timestamp: 0,
 					},
-				},
-			}
-			preciousRecord = &logs.AcquireRecord{
-				Max: 200,
-				Logs: []logs.AcquireLog{
+				}...)
+			}),
+		)
+		assert.NilError(t,
+			store.Put("precious", func(r *logs.AcquireRecord, _ bool) {
+				r.Max = 200
+				r.Logs = append(r.Logs, []logs.AcquireLog{
 					{
 						Event:     logs.AcquireEventAcquired,
 						N:         200,
 						Operator:  "alice",
 						Timestamp: time.Now().UnixNano(),
 					},
-				},
-			}
+				}...)
+			}),
 		)
-		// Replay stored operations.
-		kv.EXPECT().ForEach(gomock.Any()).
-			DoAndReturn(func(f func(string, *logs.AcquireRecord) error) error {
-				records := map[string]*logs.AcquireRecord{
-					"treasure": treasureRecord,
-					"precious": preciousRecord,
-				}
-				for name, record := range records {
-					err := f(name, record)
-					assert.NilError(t, err)
-				}
-				return nil
-			})
 
-		ctl, err := loadAcquireController(kv)
+		ctl, err := loadAcquireController(store)
 		assert.NilError(t, err)
 
 		{
 			// "treasure"
-
-			kv.EXPECT().Get("treasure").
-				Return(treasureRecord, nil).
-				Times(1)
-			kv.EXPECT().Set("treasure", treasureRecord).
-				Times(1)
 
 			// Alice's consecutive acquisition is ignored.
 			assert.NilError(t,
@@ -476,7 +435,9 @@ func TestAcquireController(t *testing.T) {
 			)
 
 			// Check stored logs.
-			assert.DeepEqual(t, *treasureRecord, logs.AcquireRecord{
+			r, err := store.Get("treasure")
+			assert.NilError(t, err)
+			assert.DeepEqual(t, *r, logs.AcquireRecord{
 				Max: 10,
 				Logs: []logs.AcquireLog{
 					{
@@ -502,12 +463,6 @@ func TestAcquireController(t *testing.T) {
 		{
 			// "precious"
 
-			kv.EXPECT().Get("precious").
-				Return(preciousRecord, nil).
-				Times(2)
-			kv.EXPECT().Set("precious", preciousRecord).
-				Times(2)
-
 			// Acquisition of shared lock by Bob fails.
 			timedOut, cancel := context.WithTimeout(background, time.Millisecond*100)
 			defer cancel()
@@ -527,7 +482,9 @@ func TestAcquireController(t *testing.T) {
 			)
 
 			// Check stored logs.
-			assert.DeepEqual(t, *preciousRecord, logs.AcquireRecord{
+			r, err := store.Get("precious")
+			assert.NilError(t, err)
+			assert.DeepEqual(t, *r, logs.AcquireRecord{
 				Max: 200,
 				Logs: []logs.AcquireLog{
 					{
