@@ -128,7 +128,7 @@ type (
 type (
 	ResourceRecordStore[T any] interface {
 		Get(identifier string) (*T, error)
-		Set(identifier string, record *T) error
+		Put(identifier string, update func(r *T, update bool)) error
 		ForEach(fn func(identifier string, record *T) error) error
 	}
 
@@ -182,13 +182,31 @@ func (s *recordStore[T]) Get(identifier string) (*T, error) {
 	return &r, nil
 }
 
-func (s *recordStore[T]) Set(identifier string, record *T) error {
-	data, err := json.Marshal(record)
-	if err != nil {
-		return err
-	}
+func (s *recordStore[T]) Put(identifier string, fn func(r *T, update bool)) error {
 	return s._db.Update(func(tx *bbolt.Tx) error {
-		return tx.Bucket(s._bucketName).Put([]byte(identifier), data)
+		var (
+			b   = tx.Bucket(s._bucketName)
+			key = []byte(identifier)
+		)
+
+		var (
+			r      T
+			update bool
+		)
+		data := b.Get(key)
+		if data != nil {
+			update = true
+			if err := json.Unmarshal(data, &r); err != nil {
+				return err
+			}
+		}
+
+		fn(&r, update)
+		newData, err := json.Marshal(r)
+		if err != nil {
+			return err
+		}
+		return b.Put(key, newData)
 	})
 }
 
