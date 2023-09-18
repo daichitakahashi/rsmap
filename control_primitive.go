@@ -101,8 +101,9 @@ func newAcquireCtl(max int64, acquired map[string]int64) *acquireCtl {
 // Acquire exclusive/shared lock.
 func (c *acquireCtl) acquire(ctx context.Context, operator string, exclusive bool) (int64, error) {
 	c._m.Lock()
-	defer c._m.Unlock()
-	if _, ok := c._acquired[operator]; ok {
+	_, ok := c._acquired[operator]
+	c._m.Unlock()
+	if ok {
 		// If already acquired by this operator, return 0.
 		return 0, nil
 	}
@@ -122,8 +123,8 @@ func (c *acquireCtl) acquire(ctx context.Context, operator string, exclusive boo
 
 func (c *acquireCtl) release(operator string) bool {
 	c._m.Lock()
-	defer c._m.Unlock()
 	n, ok := c._acquired[operator]
+	c._m.Unlock()
 	if !ok {
 		// If not acquired, return without error.
 		return false
