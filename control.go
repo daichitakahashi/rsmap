@@ -14,15 +14,15 @@ import (
 // * timeout for init and acquisition
 
 type initController struct {
-	_kv        logs.ResourceRecordStore[logs.InitRecord] // TODO: fix name
+	_store     logs.ResourceRecordStore[logs.InitRecord]
 	_resources sync.Map
 }
 
 func loadInitController(store logs.ResourceRecordStore[logs.InitRecord]) (*initController, error) {
 	c := &initController{
-		_kv: store,
+		_store: store,
 	}
-	err := c._kv.ForEach(func(name string, obj *logs.InitRecord) error {
+	err := c._store.ForEach(func(name string, obj *logs.InitRecord) error {
 		// Get init status and operator.
 		completed, operator := func() (bool, string) {
 			if len(obj.Logs) == 0 {
@@ -66,7 +66,7 @@ func (c *initController) tryInit(ctx context.Context, resourceName, operator str
 		}
 
 		// Update data on key value store.
-		return c._kv.Put(resourceName, func(r *logs.InitRecord, _ bool) {
+		return c._store.Put(resourceName, func(r *logs.InitRecord, _ bool) {
 			r.Logs = append(r.Logs, logs.InitLog{
 				Event:     logs.InitEventStarted,
 				Operator:  operator,
@@ -89,7 +89,7 @@ func (c *initController) complete(resourceName, operator string) error {
 	ctl := v.(*initCtl)
 
 	return ctl.complete(operator, func() error {
-		return c._kv.Put(resourceName, func(r *logs.InitRecord, _ bool) {
+		return c._store.Put(resourceName, func(r *logs.InitRecord, _ bool) {
 			r.Logs = append(r.Logs, logs.InitLog{
 				Event:     logs.InitEventCompleted,
 				Operator:  operator,
