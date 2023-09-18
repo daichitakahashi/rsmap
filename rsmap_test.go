@@ -3,7 +3,6 @@ package rsmap
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -13,20 +12,20 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/backoff/v2"
-	"go.etcd.io/bbolt"
 	"gotest.tools/v3/assert"
 )
 
 var background = context.Background()
 
+var errDummyConnectionError = errors.New("dummy error")
+
 type countTransport struct {
-	transport     http.RoundTripper
 	recordedTimes []time.Time
 }
 
 func (t *countTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	t.recordedTimes = append(t.recordedTimes, time.Now())
-	return t.transport.RoundTrip(req)
+	return nil, errDummyConnectionError
 }
 
 var _ http.RoundTripper = (*countTransport)(nil)
@@ -64,32 +63,25 @@ func TestNew(t *testing.T) {
 		)
 		assert.NilError(t, os.MkdirAll(actualDir, 0755))
 
-		// Open dummy DB to prevent server mode.
-		db, err := bbolt.Open(filepath.Join(actualDir, "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-		// Create dummy server address.
-		ln, err := net.Listen("tcp", ":0")
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = ln.Close()
-		})
-		assert.NilError(t,
-			os.WriteFile(filepath.Join(actualDir, "addr"), []byte("http://"+ln.Addr().String()), 0644),
-		)
+		// Create dummy Map for preventing server mode.
+		func() {
+			m, err := New(base)
+			assert.NilError(t, err)
+			t.Cleanup(m.Close)
+
+			// Confirm that the server is launched.
+			_, err = m.Resource(background, "prepare")
+			assert.NilError(t, err)
+		}()
 
 		var (
 			p = backoff.NewConstantPolicy(
 				backoff.WithInterval(time.Millisecond*100),
 				backoff.WithMaxRetries(5),
 			)
-			tp = &countTransport{
-				transport: http.DefaultTransport,
-			}
-			c = &http.Client{
-				Transport: tp,
+			tp countTransport
+			c  = &http.Client{
+				Transport: &tp,
 				Timeout:   time.Millisecond * 100,
 			}
 		)
@@ -102,9 +94,8 @@ func TestNew(t *testing.T) {
 		t.Cleanup(m.Close)
 
 		_, err = m.Resource(background, "fails")
-		var ne net.Error
-		assert.Assert(t, errors.As(err, &ne) && ne.Timeout(), "actual: %v", err)
-		assert.Assert(t, len(tp.recordedTimes) >= 5) // Five (re)tries will be recorded.
+		assert.ErrorIs(t, err, errDummyConnectionError)
+		assert.Assert(t, len(tp.recordedTimes) == 6, len(tp.recordedTimes)) // First try and five retries will be recorded.
 	})
 }
 

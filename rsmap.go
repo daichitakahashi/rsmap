@@ -65,14 +65,21 @@ const (
 	EnvExecutionID = "RSMAP_EXECUTION_ID"
 )
 
-func getDir(base string) string {
+func logsDir(base string) (string, error) {
+	if !filepath.IsAbs(base) {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(wd, base)
+	}
 	// Get execution ID.
 	executionID := strconv.Itoa(os.Getppid()) // The process of `go test`
 	if id, ok := os.LookupEnv(EnvExecutionID); ok {
 		executionID = id
 	}
 
-	return filepath.Join(base, executionID)
+	return filepath.Join(base, executionID), nil
 }
 
 // New creates an instance of [Map] that enables us to reuse external resources with thread safety.
@@ -93,10 +100,13 @@ func getDir(base string) string {
 //	m, _ := rsmap.New(filepath.Join(filepath.Dir(strings.TrimSpace(string(p))), ".rsmap"))
 func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 	// Get directory for `logs.db` and `addr`.
-	dir := getDir(rsmapDir)
+	dir, err := logsDir(rsmapDir)
+	if err != nil {
+		return nil, err
+	}
 
 	// Create directory if not exists.
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err = os.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("rsmap: failed to prepare directory(rsmapDir): %w", err)
 	}
 
@@ -127,7 +137,7 @@ func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 	}
 
 	// Start server launch process, and set release function.
-	m._stop = m.launchServer(m.clientID)
+	m._stop = m.launchServer(dir, m.clientID)
 
 	return m, nil
 }

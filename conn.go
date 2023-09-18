@@ -6,9 +6,11 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	connect_go "github.com/bufbuild/connect-go"
+	"github.com/daichitakahashi/deps"
 	"github.com/lestrrat-go/backoff/v2"
 	"go.etcd.io/bbolt"
 
@@ -44,37 +46,65 @@ func (c *config) writeAddr(addr string) error {
 	return os.WriteFile(c.addrFile, []byte(addr), 0644)
 }
 
-func (m *Map) launchServer(clientID string) func() {
-	done := make(chan struct{})
+var (
+	serverMu  sync.Mutex
+	serverSem = make(map[string]chan struct{})
+)
 
-	go func() {
+func (m *Map) launchServer(dir, clientID string) func() {
+	root := deps.New()
+
+	// Get semaphore for the directory where the logs.db exists.
+	serverMu.Lock()
+	sem, ok := serverSem[dir]
+	if !ok {
+		sem = make(chan struct{}, 1)
+		serverSem[dir] = sem
+	}
+	serverMu.Unlock()
+
+	go func(dep *deps.Dependency) (err error) {
+		defer dep.Stop(&err)
+
+		select {
+		case <-dep.Aborted():
+			return
+		case sem <- struct{}{}: // Avoid launching multiple server from same process.
+			defer func() {
+				<-sem
+			}()
+		}
+
 		db, err := m._cfg.openDB()
 		if err != nil {
-			return
+			return err
 		}
 		defer db.Close()
 
 		select {
-		case <-done:
-			return
+		case <-dep.Aborted():
+			return nil
 		default:
 		}
 
 		info, err := logs.NewInfoStore(db)
 		if err != nil {
-			return
+			return err
 		}
 
 		rm, err := newServerSideMap(db)
 		if err != nil {
-			return
+			return err
 		}
 
 		// Launch server.
 		ln, err := net.Listen("tcp", ":0")
 		if err != nil {
-			return
+			return err
 		}
+		defer func() {
+			_ = ln.Close()
+		}()
 		mux := http.NewServeMux()
 		mux.Handle(
 			resource_mapv1connect.NewResourceMapServiceHandler(&resourceMapHandler{
@@ -92,7 +122,7 @@ func (m *Map) launchServer(clientID string) func() {
 		addr := "http://" + ln.Addr().String()
 		err = m._cfg.writeAddr(addr)
 		if err != nil {
-			return
+			return err
 		}
 
 		// Record launched server.
@@ -103,7 +133,7 @@ func (m *Map) launchServer(clientID string) func() {
 			Timestamp: time.Now().UnixNano(),
 		})
 		if err != nil {
-			return
+			return err
 		}
 
 		// Replace resourceMap with serverSideMap.
@@ -111,24 +141,20 @@ func (m *Map) launchServer(clientID string) func() {
 		m.rm = rm
 		m._mu.Unlock()
 
-		<-done
-		defer func() {
-			done <- struct{}{}
-		}()
-		_ = s.Shutdown(context.Background())
+		<-dep.Aborted()
+		_ = s.Shutdown(dep.AbortContext())
 
 		// Record stopped server.
-		_ = info.PutServerLog(logs.ServerLog{
+		return info.PutServerLog(logs.ServerLog{
 			Event:     logs.ServerEventStopped,
 			Operator:  clientID,
 			Timestamp: time.Now().UnixNano(),
 		})
-	}()
+	}(root.Dependent())
 
-	return func() {
-		done <- struct{}{}
-		<-done
-	}
+	return sync.OnceFunc(func() {
+		_ = root.Abort(context.Background())
+	})
 }
 
 type resourceMapHandler struct {
