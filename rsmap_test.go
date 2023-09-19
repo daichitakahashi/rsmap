@@ -180,32 +180,107 @@ func TestMap_Resource(t *testing.T) {
 	t.Run("WithInit", func(t *testing.T) {
 		t.Parallel()
 
-		var (
-			dir   = t.TempDir()
-			count int64
-			i     = WithInit(func(ctx context.Context) {
-				atomic.AddInt64(&count, 1)
-			})
-		)
-		newResourceWithInit := func(t *testing.T) {
-			t.Helper()
+		t.Run("Init succeeds only once", func(t *testing.T) {
+			t.Parallel()
 
-			m, err := New(dir)
+			var (
+				dir   = t.TempDir()
+				count int64
+				i     = WithInit(func(ctx context.Context) error {
+					atomic.AddInt64(&count, 1)
+					return nil
+				})
+			)
+			newResourceWithInit := func(t *testing.T) {
+				t.Helper()
+
+				m, err := New(dir)
+				assert.NilError(t, err)
+				t.Cleanup(m.Close)
+
+				_, err = m.Resource(background, "init", i)
+				assert.NilError(t, err)
+			}
+
+			// Try resource registration with init 5 times.
+			newResourceWithInit(t)
+			newResourceWithInit(t)
+			newResourceWithInit(t)
+			newResourceWithInit(t)
+			newResourceWithInit(t)
+
+			// Check count of init call.
+			assert.Assert(t, count == 1)
+		})
+
+		t.Run("Init succeeds after the error", func(t *testing.T) {
+			t.Parallel()
+
+			var (
+				dir        = t.TempDir()
+				errFailure = errors.New("init failed")
+				succeeded  bool
+			)
+			newMap := func(t *testing.T) *Map {
+				t.Helper()
+
+				m, err := New(dir)
+				assert.NilError(t, err)
+				t.Cleanup(m.Close)
+				return m
+			}
+
+			// First try.
+			_, err := newMap(t).Resource(background, "treasure", WithInit(func(ctx context.Context) error {
+				return errFailure
+			}))
+			assert.ErrorIs(t, err, errFailure)
+
+			// Retry.
+			_, err = newMap(t).Resource(background, "treasure", WithInit(func(ctx context.Context) error {
+				succeeded = true
+				return nil
+			}))
 			assert.NilError(t, err)
-			t.Cleanup(m.Close)
+			assert.Assert(t, succeeded)
+		})
 
-			_, err = m.Resource(background, "init", i)
+		t.Run("Init succeeds after the panic", func(t *testing.T) {
+			t.Parallel()
+
+			var (
+				dir       = t.TempDir()
+				panicVal  = time.Now()
+				succeeded bool
+			)
+			newMap := func(t *testing.T) *Map {
+				t.Helper()
+
+				m, err := New(dir)
+				assert.NilError(t, err)
+				t.Cleanup(m.Close)
+				return m
+			}
+
+			// First try.
+			recovered := func() (recovered any) {
+				defer func() {
+					recovered = recover()
+				}()
+				newMap(t).Resource(background, "treasure", WithInit(func(ctx context.Context) error {
+					panic(panicVal)
+				}))
+				return nil
+			}()
+			assert.DeepEqual(t, recovered, panicVal)
+
+			// Retry.
+			_, err := newMap(t).Resource(background, "treasure", WithInit(func(ctx context.Context) error {
+				succeeded = true
+				return nil
+			}))
 			assert.NilError(t, err)
-		}
-
-		// Try resource registration with init 5 times.
-		newResourceWithInit(t)
-		newResourceWithInit(t)
-		newResourceWithInit(t)
-		newResourceWithInit(t)
-		newResourceWithInit(t)
-
-		// Check count of init call.
-		assert.Assert(t, count == 1)
+			assert.Assert(t, succeeded)
+		})
 	})
 }

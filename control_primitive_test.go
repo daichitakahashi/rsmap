@@ -3,6 +3,7 @@ package rsmap
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -15,47 +16,50 @@ import (
 func TestInitCtl(t *testing.T) {
 	t.Parallel()
 
-	var (
-		ctl    = newInitCtl(false)
-		begin  = make(chan struct{})
-		eg     errgroup.Group
-		result = bytes.NewBuffer(nil)
-	)
+	t.Run("init must be performed once", func(t *testing.T) {
+		t.Parallel()
 
-	for i := 0; i < 10; i++ {
-		operator := strconv.Itoa(i)
-		eg.Go(func() error {
-			<-begin
+		var (
+			ctl    = newInitCtl(false)
+			begin  = make(chan struct{})
+			eg     errgroup.Group
+			result = bytes.NewBuffer(nil)
+		)
 
-			var started bool
-			err := ctl.tryInit(background, operator, func(try bool) error {
-				if try {
-					time.Sleep(time.Second)
-					fmt.Fprintln(result, "Start initialization!")
-					started = true
+		for i := 0; i < 10; i++ {
+			operator := strconv.Itoa(i)
+			eg.Go(func() error {
+				<-begin
+
+				var started bool
+				err := ctl.tryInit(background, operator, func(try bool) error {
+					if try {
+						time.Sleep(time.Second)
+						fmt.Fprintln(result, "Start initialization!")
+						started = true
+						return nil
+					} else {
+						fmt.Fprintln(result, "Already initialized.")
+					}
 					return nil
-				} else {
-					fmt.Fprintln(result, "Already initialized.")
+				})
+				if err != nil {
+					return err
+				}
+
+				if started {
+					return ctl.complete(operator, func() error {
+						fmt.Fprintln(result, "Completed.")
+						return nil
+					})
 				}
 				return nil
 			})
-			if err != nil {
-				return err
-			}
+		}
 
-			if started {
-				return ctl.complete(operator, func() error {
-					fmt.Fprintln(result, "Completed.")
-					return nil
-				})
-			}
-			return nil
-		})
-	}
-
-	close(begin)
-	assert.NilError(t, eg.Wait())
-	assert.DeepEqual(t, result.String(), `Start initialization!
+		close(begin)
+		assert.NilError(t, eg.Wait())
+		assert.DeepEqual(t, result.String(), `Start initialization!
 Completed.
 Already initialized.
 Already initialized.
@@ -67,6 +71,59 @@ Already initialized.
 Already initialized.
 Already initialized.
 `)
+	})
+
+	t.Run("retry init after failure", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			ctl      = newInitCtl(false)
+			eg       errgroup.Group
+			prepared = make(chan struct{})
+			started  = make(chan struct{})
+		)
+
+		// First try succeeds.
+		eg.Go(func() error {
+			prepared <- struct{}{}
+			<-started
+
+			err := ctl.tryInit(background, "alice", func(try bool) error {
+				if !try {
+					return errors.New("first try must succeeds")
+				}
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+
+			// Set first try failed.
+			return ctl.fail("alice", func() error { return nil })
+		})
+
+		// Also, second try succeeds after the failure of first try.
+		eg.Go(func() error {
+			prepared <- struct{}{}
+			<-started
+			time.Sleep(time.Millisecond * 200)
+
+			return ctl.tryInit(background, "bob", func(try bool) error {
+				if !try {
+					return errors.New("second try must succeeds")
+				}
+				return nil
+			})
+		})
+		<-prepared
+		<-prepared
+		close(started)
+		assert.NilError(t, eg.Wait())
+
+		assert.NilError(t, ctl.complete("bob", func() error {
+			return nil
+		}))
+	})
 }
 
 func TestAcquireCtl(t *testing.T) {

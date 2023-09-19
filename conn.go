@@ -179,6 +179,14 @@ func (h *resourceMapHandler) CompleteInitResource(ctx context.Context, req *conn
 	return connect_go.NewResponse(&resource_mapv1.CompleteInitResourceResponse{}), nil
 }
 
+func (h *resourceMapHandler) FailInitResource(ctx context.Context, req *connect_go.Request[resource_mapv1.FailInitResourceRequest]) (*connect_go.Response[resource_mapv1.FailInitResourceResponse], error) {
+	err := h._rm.failInit(ctx, req.Msg.ResourceName, req.Msg.ClientId)
+	if err != nil {
+		return nil, err
+	}
+	return connect_go.NewResponse(&resource_mapv1.FailInitResourceResponse{}), nil
+}
+
 func (h *resourceMapHandler) Acquire(ctx context.Context, req *connect_go.Request[resource_mapv1.AcquireRequest]) (*connect_go.Response[resource_mapv1.AcquireResponse], error) {
 	err := h._rm.acquire(ctx, req.Msg.ResourceName, req.Msg.ClientId, req.Msg.MaxParallelism, req.Msg.Exclusive)
 	if err != nil {
@@ -259,6 +267,18 @@ func (m *clientSideMap) completeInit(ctx context.Context, resourceName string, o
 	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
 
 		_, err := cli.CompleteInitResource(ctx, connect_go.NewRequest(&resource_mapv1.CompleteInitResourceRequest{
+			ResourceName: resourceName,
+			ClientId:     operator,
+		}))
+
+		return err
+	})
+}
+
+func (m *clientSideMap) failInit(ctx context.Context, resourceName, operator string) error {
+	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
+
+		_, err := cli.FailInitResource(ctx, connect_go.NewRequest(&resource_mapv1.FailInitResourceRequest{
 			ResourceName: resourceName,
 			ClientId:     operator,
 		}))

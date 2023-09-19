@@ -2,12 +2,14 @@ package rsmap
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.etcd.io/bbolt"
+	"golang.org/x/sync/errgroup"
 	"gotest.tools/v3/assert"
 
 	"github.com/daichitakahashi/rsmap/logs"
@@ -133,6 +135,67 @@ func TestInitController(t *testing.T) {
 		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
 	})
 
+	t.Run("Retry is allowed after the failure of first init", func(t *testing.T) {
+		t.Parallel()
+
+		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
+
+		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		assert.NilError(t, err)
+
+		ctl, err := loadInitController(store)
+		assert.NilError(t, err)
+
+		var (
+			eg       errgroup.Group
+			prepared = make(chan struct{})
+			started  = make(chan struct{})
+		)
+
+		eg.Go(func() error {
+			prepared <- struct{}{}
+			<-started
+
+			try, err := ctl.tryInit(background, "treasure", "alice")
+			if err != nil {
+				return err
+			}
+			if !try {
+				return errors.New("try must be true")
+			}
+
+			return ctl.fail("treasure", "alice")
+		})
+
+		eg.Go(func() error {
+			prepared <- struct{}{}
+			<-started
+			time.Sleep(time.Millisecond * 200)
+
+			try, err := ctl.tryInit(background, "treasure", "bob")
+			if err != nil {
+				return err
+			}
+			if !try {
+				return errors.New("try must be true")
+			}
+
+			return nil
+		})
+		<-prepared
+		<-prepared
+		close(started)
+		assert.NilError(t, eg.Wait())
+
+		assert.NilError(t,
+			ctl.complete("treasure", "bob"),
+		)
+	})
+
 	t.Run("Replay the status that init is in progress", func(t *testing.T) {
 		t.Parallel()
 
@@ -225,6 +288,36 @@ func TestInitController(t *testing.T) {
 		try, err := ctl.tryInit(background, "treasure", "bob")
 		assert.NilError(t, err)
 		assert.Assert(t, !try)
+	})
+
+	t.Run("Replay the status that init is failed", func(t *testing.T) {
+		t.Parallel()
+
+		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+		assert.NilError(t, err)
+		t.Cleanup(func() {
+			_ = db.Close()
+		})
+
+		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		assert.NilError(t, err)
+
+		ctl, err := loadInitController(store)
+		assert.NilError(t, err)
+
+		// Setup situation that init has failed.
+		_, err = ctl.tryInit(background, "treasure", "alice")
+		assert.NilError(t, err)
+		assert.NilError(t, ctl.fail("treasure", "alice"))
+
+		replayed, err := loadInitController(store)
+		assert.NilError(t, err)
+
+		// Bob retries.
+		try, err := replayed.tryInit(background, "treasure", "bob")
+		assert.NilError(t, err)
+		assert.Assert(t, try)
+		assert.NilError(t, replayed.complete("treasure", "bob"))
 	})
 }
 

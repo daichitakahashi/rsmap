@@ -39,6 +39,9 @@ const (
 	// ResourceMapServiceCompleteInitResourceProcedure is the fully-qualified name of the
 	// ResourceMapService's CompleteInitResource RPC.
 	ResourceMapServiceCompleteInitResourceProcedure = "/internal.proto.resource_map.v1.ResourceMapService/CompleteInitResource"
+	// ResourceMapServiceFailInitResourceProcedure is the fully-qualified name of the
+	// ResourceMapService's FailInitResource RPC.
+	ResourceMapServiceFailInitResourceProcedure = "/internal.proto.resource_map.v1.ResourceMapService/FailInitResource"
 	// ResourceMapServiceAcquireProcedure is the fully-qualified name of the ResourceMapService's
 	// Acquire RPC.
 	ResourceMapServiceAcquireProcedure = "/internal.proto.resource_map.v1.ResourceMapService/Acquire"
@@ -52,6 +55,7 @@ const (
 type ResourceMapServiceClient interface {
 	TryInitResource(context.Context, *connect_go.Request[v1.TryInitResourceRequest]) (*connect_go.Response[v1.TryInitResourceResponse], error)
 	CompleteInitResource(context.Context, *connect_go.Request[v1.CompleteInitResourceRequest]) (*connect_go.Response[v1.CompleteInitResourceResponse], error)
+	FailInitResource(context.Context, *connect_go.Request[v1.FailInitResourceRequest]) (*connect_go.Response[v1.FailInitResourceResponse], error)
 	Acquire(context.Context, *connect_go.Request[v1.AcquireRequest]) (*connect_go.Response[v1.AcquireResponse], error)
 	Release(context.Context, *connect_go.Request[v1.ReleaseRequest]) (*connect_go.Response[v1.ReleaseResponse], error)
 }
@@ -77,6 +81,11 @@ func NewResourceMapServiceClient(httpClient connect_go.HTTPClient, baseURL strin
 			baseURL+ResourceMapServiceCompleteInitResourceProcedure,
 			opts...,
 		),
+		failInitResource: connect_go.NewClient[v1.FailInitResourceRequest, v1.FailInitResourceResponse](
+			httpClient,
+			baseURL+ResourceMapServiceFailInitResourceProcedure,
+			opts...,
+		),
 		acquire: connect_go.NewClient[v1.AcquireRequest, v1.AcquireResponse](
 			httpClient,
 			baseURL+ResourceMapServiceAcquireProcedure,
@@ -94,6 +103,7 @@ func NewResourceMapServiceClient(httpClient connect_go.HTTPClient, baseURL strin
 type resourceMapServiceClient struct {
 	tryInitResource      *connect_go.Client[v1.TryInitResourceRequest, v1.TryInitResourceResponse]
 	completeInitResource *connect_go.Client[v1.CompleteInitResourceRequest, v1.CompleteInitResourceResponse]
+	failInitResource     *connect_go.Client[v1.FailInitResourceRequest, v1.FailInitResourceResponse]
 	acquire              *connect_go.Client[v1.AcquireRequest, v1.AcquireResponse]
 	release              *connect_go.Client[v1.ReleaseRequest, v1.ReleaseResponse]
 }
@@ -107,6 +117,11 @@ func (c *resourceMapServiceClient) TryInitResource(ctx context.Context, req *con
 // internal.proto.resource_map.v1.ResourceMapService.CompleteInitResource.
 func (c *resourceMapServiceClient) CompleteInitResource(ctx context.Context, req *connect_go.Request[v1.CompleteInitResourceRequest]) (*connect_go.Response[v1.CompleteInitResourceResponse], error) {
 	return c.completeInitResource.CallUnary(ctx, req)
+}
+
+// FailInitResource calls internal.proto.resource_map.v1.ResourceMapService.FailInitResource.
+func (c *resourceMapServiceClient) FailInitResource(ctx context.Context, req *connect_go.Request[v1.FailInitResourceRequest]) (*connect_go.Response[v1.FailInitResourceResponse], error) {
+	return c.failInitResource.CallUnary(ctx, req)
 }
 
 // Acquire calls internal.proto.resource_map.v1.ResourceMapService.Acquire.
@@ -124,6 +139,7 @@ func (c *resourceMapServiceClient) Release(ctx context.Context, req *connect_go.
 type ResourceMapServiceHandler interface {
 	TryInitResource(context.Context, *connect_go.Request[v1.TryInitResourceRequest]) (*connect_go.Response[v1.TryInitResourceResponse], error)
 	CompleteInitResource(context.Context, *connect_go.Request[v1.CompleteInitResourceRequest]) (*connect_go.Response[v1.CompleteInitResourceResponse], error)
+	FailInitResource(context.Context, *connect_go.Request[v1.FailInitResourceRequest]) (*connect_go.Response[v1.FailInitResourceResponse], error)
 	Acquire(context.Context, *connect_go.Request[v1.AcquireRequest]) (*connect_go.Response[v1.AcquireResponse], error)
 	Release(context.Context, *connect_go.Request[v1.ReleaseRequest]) (*connect_go.Response[v1.ReleaseResponse], error)
 }
@@ -144,6 +160,11 @@ func NewResourceMapServiceHandler(svc ResourceMapServiceHandler, opts ...connect
 		svc.CompleteInitResource,
 		opts...,
 	)
+	resourceMapServiceFailInitResourceHandler := connect_go.NewUnaryHandler(
+		ResourceMapServiceFailInitResourceProcedure,
+		svc.FailInitResource,
+		opts...,
+	)
 	resourceMapServiceAcquireHandler := connect_go.NewUnaryHandler(
 		ResourceMapServiceAcquireProcedure,
 		svc.Acquire,
@@ -160,6 +181,8 @@ func NewResourceMapServiceHandler(svc ResourceMapServiceHandler, opts ...connect
 			resourceMapServiceTryInitResourceHandler.ServeHTTP(w, r)
 		case ResourceMapServiceCompleteInitResourceProcedure:
 			resourceMapServiceCompleteInitResourceHandler.ServeHTTP(w, r)
+		case ResourceMapServiceFailInitResourceProcedure:
+			resourceMapServiceFailInitResourceHandler.ServeHTTP(w, r)
 		case ResourceMapServiceAcquireProcedure:
 			resourceMapServiceAcquireHandler.ServeHTTP(w, r)
 		case ResourceMapServiceReleaseProcedure:
@@ -179,6 +202,10 @@ func (UnimplementedResourceMapServiceHandler) TryInitResource(context.Context, *
 
 func (UnimplementedResourceMapServiceHandler) CompleteInitResource(context.Context, *connect_go.Request[v1.CompleteInitResourceRequest]) (*connect_go.Response[v1.CompleteInitResourceResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("internal.proto.resource_map.v1.ResourceMapService.CompleteInitResource is not implemented"))
+}
+
+func (UnimplementedResourceMapServiceHandler) FailInitResource(context.Context, *connect_go.Request[v1.FailInitResourceRequest]) (*connect_go.Response[v1.FailInitResourceResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("internal.proto.resource_map.v1.ResourceMapService.FailInitResource is not implemented"))
 }
 
 func (UnimplementedResourceMapServiceHandler) Acquire(context.Context, *connect_go.Request[v1.AcquireRequest]) (*connect_go.Response[v1.AcquireResponse], error) {

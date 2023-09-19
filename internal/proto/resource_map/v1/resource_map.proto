@@ -5,6 +5,7 @@ package internal.proto.resource_map.v1;
 service ResourceMapService {
   rpc TryInitResource(TryInitResourceRequest) returns (TryInitResourceResponse);
   rpc CompleteInitResource(CompleteInitResourceRequest) returns (CompleteInitResourceResponse);
+  rpc FailInitResource(FailInitResourceRequest) returns (FailInitResourceResponse);
   rpc Acquire(AcquireRequest) returns (AcquireResponse);
   rpc Release(ReleaseRequest) returns (ReleaseResponse);
 }
@@ -24,6 +25,13 @@ message CompleteInitResourceRequest {
 }
 
 message CompleteInitResourceResponse {}
+
+message FailInitResourceRequest {
+  string resource_name = 1;
+  string client_id = 2;
+}
+
+message FailInitResourceResponse {}
 
 message AcquireRequest {
   string resource_name = 1;

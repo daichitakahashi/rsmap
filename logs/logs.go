@@ -90,6 +90,7 @@ type InitEvent string
 const (
 	InitEventStarted   InitEvent = "started"
 	InitEventCompleted InitEvent = "completed"
+	InitEventFailed    InitEvent = "failed"
 )
 
 type (
