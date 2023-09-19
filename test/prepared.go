@@ -14,8 +14,9 @@ const Resource = "resource"
 func Options() []*rsmap.ResourceOption {
 	return []*rsmap.ResourceOption{
 		rsmap.WithMaxParallelism(3),
-		rsmap.WithInit(func(ctx context.Context) {
+		rsmap.WithInit(func(ctx context.Context) error {
 			DoSomething()
+			return nil
 		}),
 	}
 }

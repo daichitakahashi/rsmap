@@ -2,6 +2,7 @@ package rsmap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -163,7 +164,7 @@ func WithMaxParallelism(n int64) *ResourceOption {
 }
 
 // TODO: add error as a return value.
-type InitFunc func(ctx context.Context)
+type InitFunc func(ctx context.Context) error
 
 // WithInit specifies InitFunc for resource initialization.
 //
@@ -183,8 +184,9 @@ func WithInit(init InitFunc) *ResourceOption {
 func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption) (*Resource, error) {
 	var (
 		n             = int64(5)
-		init InitFunc = func(ctx context.Context) {
+		init InitFunc = func(ctx context.Context) error {
 			// Do nothing.
+			return nil
 		}
 	)
 
@@ -206,13 +208,31 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 	}
 	if try {
 		// Initialization of the resource.
-		// TODO: error handling.
-		init(ctx)
+		err = func() (err error) {
+			var notPanicked bool
+			defer func() {
+				m._mu.RLock()
+				rm := m.rm
+				m._mu.RUnlock()
 
-		m._mu.RLock()
-		rm := m.rm
-		m._mu.RUnlock()
-		err = rm.completeInit(ctx, name, m.clientID)
+				// If init succeeds, mark as complete.
+				if notPanicked && err == nil {
+					err = rm.completeInit(ctx, name, m.clientID)
+					return
+				}
+
+				// Mark as failed when error or panic occurred.
+				// CAUTION: Do not recover panic to preserve stacktrace.
+				err = errors.Join(
+					err,
+					rm.failInit(ctx, name, m.clientID),
+				)
+			}()
+
+			err = init(ctx)
+			notPanicked = true
+			return
+		}()
 		if err != nil {
 			return nil, err
 		}
@@ -252,6 +272,7 @@ func (r *Resource) UnlockAny() error {
 type resourceMap interface {
 	tryInit(ctx context.Context, resourceName, operator string) (bool, error)
 	completeInit(ctx context.Context, resourceName, operator string) error
+	failInit(ctx context.Context, resourceName, operator string) error
 	acquire(ctx context.Context, resourceName, operator string, max int64, exclusive bool) error
 	release(ctx context.Context, resourceName, operator string) error
 }
@@ -294,6 +315,10 @@ func (m *serverSideMap) tryInit(ctx context.Context, resourceName, operator stri
 
 func (m *serverSideMap) completeInit(_ context.Context, resourceName, operator string) error {
 	return m._init.complete(resourceName, operator)
+}
+
+func (m *serverSideMap) failInit(_ context.Context, resourceName, operator string) error {
+	return m._init.fail(resourceName, operator)
 }
 
 func (m *serverSideMap) acquire(ctx context.Context, resourceName string, operator string, max int64, exclusive bool) error {

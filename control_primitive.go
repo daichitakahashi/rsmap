@@ -63,8 +63,22 @@ func (c *initCtl) complete(operator string, fn func() error) error {
 		return errors.New("invalid operation")
 	}
 
+	if err := fn(); err != nil {
+		return err
+	}
+
 	// Update status.
 	c.completed.Store(true)
+
+	<-c._lock // Release.
+	return nil
+}
+
+// Mark init operation by operator as failed.
+func (c *initCtl) fail(operator string, fn func() error) error {
+	if c.operator != operator {
+		return errors.New("invalid operation")
+	}
 
 	if err := fn(); err != nil {
 		return err

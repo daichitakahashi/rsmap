@@ -10,7 +10,6 @@ import (
 )
 
 // TODO
-// * status for init failure
 // * timeout for init and acquisition
 
 type initController struct {
@@ -23,20 +22,22 @@ func loadInitController(store logs.ResourceRecordStore[logs.InitRecord]) (*initC
 		_store: store,
 	}
 	err := c._store.ForEach(func(name string, obj *logs.InitRecord) error {
-		// Get init status and operator.
-		completed, operator := func() (bool, string) {
-			if len(obj.Logs) == 0 {
-				return false, "" // Basically, it's impossible path.
-			}
-			last := obj.Logs[len(obj.Logs)-1]
-			return last.Event == logs.InitEventCompleted, last.Operator
-		}()
+		if len(obj.Logs) == 0 {
+			return nil // Impossible path.
+		}
 
+		// Get last init status and operator.
+		last := obj.Logs[len(obj.Logs)-1]
+		if last.Event == logs.InitEventFailed {
+			return nil // Former try is failed and anyone haven't started next try yet.
+		}
+
+		completed := last.Event == logs.InitEventCompleted
 		ctl := newInitCtl(completed)
 		if !completed {
 			_ = ctl.tryInit(
 				context.Background(),
-				operator,
+				last.Operator,
 				func(try bool) error { return nil },
 			)
 		}
@@ -92,6 +93,24 @@ func (c *initController) complete(resourceName, operator string) error {
 		return c._store.Put(resourceName, func(r *logs.InitRecord, _ bool) {
 			r.Logs = append(r.Logs, logs.InitLog{
 				Event:     logs.InitEventCompleted,
+				Operator:  operator,
+				Timestamp: time.Now().UnixNano(),
+			})
+		})
+	})
+}
+
+func (c *initController) fail(resourceName, operator string) error {
+	v, found := c._resources.Load(resourceName)
+	if !found {
+		return errors.New("resource not found")
+	}
+	ctl := v.(*initCtl)
+
+	return ctl.fail(operator, func() error {
+		return c._store.Put(resourceName, func(r *logs.InitRecord, _ bool) {
+			r.Logs = append(r.Logs, logs.InitLog{
+				Event:     logs.InitEventFailed,
 				Operator:  operator,
 				Timestamp: time.Now().UnixNano(),
 			})
