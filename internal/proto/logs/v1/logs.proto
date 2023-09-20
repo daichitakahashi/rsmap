@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package internal.proto.logs.v1;
+
+message Caller {
+  string file = 1;
+  int64 line = 2;
+  string hash = 3;
+}
+
+enum ServerEvent {
+  SERVER_EVENT_UNSPECIFIED = 0;
+  SERVER_EVENT_LAUNCHED = 1;
+  SERVER_EVENT_STOPPED = 2;
+}
+
+message ServerRecord {
+  repeated ServerLog logs = 1;
+}
+
+message ServerLog {
+  ServerEvent event = 1;
+  string addr = 2;
+  repeated Caller context = 3;
+  int64 timestamp = 4;
+}
+
+enum InitEvent {
+  INIT_EVENT_UNSPECIFIED = 0;
+  INIT_EVENT_STARTED = 1;
+  INIT_EVENT_COMPLETED = 2;
+  INIT_EVENT_FAILED = 3;
+}
+
+message InitRecord {
+  repeated InitLog logs = 1;
+}
+
+message InitLog {
+  InitEvent event = 1;
+  repeated Caller context = 2;
+  int64 timestamp = 3;
+}
+
+enum AcquisitionEvent {
+  ACQUISITION_EVENT_UNSPECIFIED = 0;
+  ACQUISITION_EVENT_ACQUIRED = 1;
+  ACQUISITION_EVENT_RELEASED = 2;
+}
+
+message AcquisitionRecord {
+  int64 max = 1;
+  repeated AcquisitionLog logs = 2;
+}
+
+message AcquisitionLog {
+  AcquisitionEvent event = 1;
+  int64 n = 2;
+  repeated Caller context = 3;
+  int64 timestamp = 4;
+}
