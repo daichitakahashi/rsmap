@@ -71,7 +71,7 @@ func run(filename, operation, resource string) error {
 	type row struct {
 		ts        int64 // timestamp
 		operation string
-		operator  string
+		context   string
 		data      string
 	}
 	var rows []row
@@ -110,7 +110,7 @@ func run(filename, operation, resource string) error {
 			insert(row{
 				ts:        l.Timestamp,
 				operation: "server:" + string(l.Event),
-				operator:  l.Operator,
+				context:   l.Context.String(),
 				data:      data,
 			})
 		}
@@ -130,7 +130,7 @@ func run(filename, operation, resource string) error {
 			insert(row{
 				ts:        l.Timestamp,
 				operation: "init:" + string(l.Event),
-				operator:  l.Operator,
+				context:   l.Context.String(),
 				data:      "",
 			})
 		}
@@ -157,14 +157,14 @@ func run(filename, operation, resource string) error {
 			insert(row{
 				ts:        l.Timestamp,
 				operation: string(l.Event),
-				operator:  l.Operator,
+				context:   l.Context.String(),
 				data:      data,
 			})
 		}
 	}
 
 	fmt.Printf("Resource identifier: %q\n\n", resource)
-	tbl := table.New("Time", "Operation", "Operator", "Data").
+	tbl := table.New("Time", "Operation", "Context(Map->Resource)", "Data").
 		WithHeaderFormatter(
 			color.New(color.FgGreen, color.Underline).SprintfFunc(),
 		).
@@ -174,7 +174,7 @@ func run(filename, operation, resource string) error {
 
 	var last time.Time
 	for _, r := range rows {
-		tbl.AddRow(formatTime(r.ts, &last), r.operation, r.operator, r.data)
+		tbl.AddRow(formatTime(r.ts, &last), r.operation, r.context, r.data)
 	}
 	tbl.Print()
 
