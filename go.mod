@@ -7,7 +7,6 @@ require (
 	github.com/daichitakahashi/deps v0.0.3
 	github.com/fatih/color v1.15.0
 	github.com/google/go-cmp v0.5.9
-	github.com/google/uuid v1.3.1
 	github.com/lestrrat-go/backoff/v2 v2.0.8
 	github.com/lestrrat-go/option v1.0.1
 	github.com/rodaine/table v1.1.0

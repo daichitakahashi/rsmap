@@ -51,7 +51,7 @@ var (
 	serverSem = make(map[string]chan struct{})
 )
 
-func (m *Map) launchServer(dir, clientID string) func() {
+func (m *Map) launchServer(dir string, callers logs.CallerContext) func() {
 	root := deps.New()
 
 	// Get semaphore for the directory where the logs.db exists.
@@ -129,7 +129,7 @@ func (m *Map) launchServer(dir, clientID string) func() {
 		err = info.PutServerLog(logs.ServerLog{
 			Event:     logs.ServerEventLaunched,
 			Addr:      addr,
-			Operator:  clientID,
+			Context:   callers,
 			Timestamp: time.Now().UnixNano(),
 		})
 		if err != nil {
@@ -147,7 +147,7 @@ func (m *Map) launchServer(dir, clientID string) func() {
 		// Record stopped server.
 		return info.PutServerLog(logs.ServerLog{
 			Event:     logs.ServerEventStopped,
-			Operator:  clientID,
+			Context:   callers,
 			Timestamp: time.Now().UnixNano(),
 		})
 	}(root.Dependent())
@@ -157,12 +157,36 @@ func (m *Map) launchServer(dir, clientID string) func() {
 	})
 }
 
+func convertCallerContextToPB(c logs.CallerContext) []*resource_mapv1.Caller {
+	result := make([]*resource_mapv1.Caller, 0, len(c))
+	for _, cc := range c {
+		result = append(result, &resource_mapv1.Caller{
+			File: cc.File,
+			Line: int64(cc.Line),
+			Hash: cc.Hash,
+		})
+	}
+	return result
+}
+
+func convertCallerContextFromPB(c []*resource_mapv1.Caller) logs.CallerContext {
+	result := make(logs.CallerContext, 0, len(c))
+	for i := range c {
+		result = append(result, logs.Caller{
+			File: c[i].File,
+			Line: int(c[i].Line),
+			Hash: c[i].Hash,
+		})
+	}
+	return result
+}
+
 type resourceMapHandler struct {
 	_rm *serverSideMap
 }
 
 func (h *resourceMapHandler) TryInitResource(ctx context.Context, req *connect_go.Request[resource_mapv1.TryInitResourceRequest]) (*connect_go.Response[resource_mapv1.TryInitResourceResponse], error) {
-	try, err := h._rm.tryInit(ctx, req.Msg.ResourceName, req.Msg.ClientId)
+	try, err := h._rm.tryInit(ctx, req.Msg.ResourceName, convertCallerContextFromPB(req.Msg.Context))
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +196,7 @@ func (h *resourceMapHandler) TryInitResource(ctx context.Context, req *connect_g
 }
 
 func (h *resourceMapHandler) CompleteInitResource(ctx context.Context, req *connect_go.Request[resource_mapv1.CompleteInitResourceRequest]) (*connect_go.Response[resource_mapv1.CompleteInitResourceResponse], error) {
-	err := h._rm.completeInit(ctx, req.Msg.ResourceName, req.Msg.ClientId)
+	err := h._rm.completeInit(ctx, req.Msg.ResourceName, convertCallerContextFromPB(req.Msg.Context))
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +204,7 @@ func (h *resourceMapHandler) CompleteInitResource(ctx context.Context, req *conn
 }
 
 func (h *resourceMapHandler) FailInitResource(ctx context.Context, req *connect_go.Request[resource_mapv1.FailInitResourceRequest]) (*connect_go.Response[resource_mapv1.FailInitResourceResponse], error) {
-	err := h._rm.failInit(ctx, req.Msg.ResourceName, req.Msg.ClientId)
+	err := h._rm.failInit(ctx, req.Msg.ResourceName, convertCallerContextFromPB(req.Msg.Context))
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +212,7 @@ func (h *resourceMapHandler) FailInitResource(ctx context.Context, req *connect_
 }
 
 func (h *resourceMapHandler) Acquire(ctx context.Context, req *connect_go.Request[resource_mapv1.AcquireRequest]) (*connect_go.Response[resource_mapv1.AcquireResponse], error) {
-	err := h._rm.acquire(ctx, req.Msg.ResourceName, req.Msg.ClientId, req.Msg.MaxParallelism, req.Msg.Exclusive)
+	err := h._rm.acquire(ctx, req.Msg.ResourceName, convertCallerContextFromPB(req.Msg.Context), req.Msg.MaxParallelism, req.Msg.Exclusive)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +220,7 @@ func (h *resourceMapHandler) Acquire(ctx context.Context, req *connect_go.Reques
 }
 
 func (h *resourceMapHandler) Release(ctx context.Context, req *connect_go.Request[resource_mapv1.ReleaseRequest]) (*connect_go.Response[resource_mapv1.ReleaseResponse], error) {
-	err := h._rm.release(ctx, req.Msg.ResourceName, req.Msg.ClientId)
+	err := h._rm.release(ctx, req.Msg.ResourceName, convertCallerContextFromPB(req.Msg.Context))
 	if err != nil {
 		return nil, err
 	}
@@ -246,12 +270,12 @@ func (m *clientSideMap) try(ctx context.Context, op func(ctx context.Context, cl
 	}
 }
 
-func (m *clientSideMap) tryInit(ctx context.Context, resourceName string, operator string) (try bool, _ error) {
+func (m *clientSideMap) tryInit(ctx context.Context, resourceName string, operator logs.CallerContext) (try bool, _ error) {
 	err := m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
 
 		resp, err := cli.TryInitResource(ctx, connect_go.NewRequest(&resource_mapv1.TryInitResourceRequest{
 			ResourceName: resourceName,
-			ClientId:     operator,
+			Context:      convertCallerContextToPB(operator),
 		}))
 		if err != nil {
 			return err
@@ -263,36 +287,36 @@ func (m *clientSideMap) tryInit(ctx context.Context, resourceName string, operat
 	return try, err
 }
 
-func (m *clientSideMap) completeInit(ctx context.Context, resourceName string, operator string) error {
+func (m *clientSideMap) completeInit(ctx context.Context, resourceName string, operator logs.CallerContext) error {
 	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
 
 		_, err := cli.CompleteInitResource(ctx, connect_go.NewRequest(&resource_mapv1.CompleteInitResourceRequest{
 			ResourceName: resourceName,
-			ClientId:     operator,
+			Context:      convertCallerContextToPB(operator),
 		}))
 
 		return err
 	})
 }
 
-func (m *clientSideMap) failInit(ctx context.Context, resourceName, operator string) error {
+func (m *clientSideMap) failInit(ctx context.Context, resourceName string, operator logs.CallerContext) error {
 	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
 
 		_, err := cli.FailInitResource(ctx, connect_go.NewRequest(&resource_mapv1.FailInitResourceRequest{
 			ResourceName: resourceName,
-			ClientId:     operator,
+			Context:      convertCallerContextToPB(operator),
 		}))
 
 		return err
 	})
 }
 
-func (m *clientSideMap) acquire(ctx context.Context, resourceName string, operator string, max int64, exclusive bool) error {
+func (m *clientSideMap) acquire(ctx context.Context, resourceName string, operator logs.CallerContext, max int64, exclusive bool) error {
 	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
 
 		_, err := cli.Acquire(ctx, connect_go.NewRequest(&resource_mapv1.AcquireRequest{
 			ResourceName:   resourceName,
-			ClientId:       operator,
+			Context:        convertCallerContextToPB(operator),
 			MaxParallelism: max,
 			Exclusive:      exclusive,
 		}))
@@ -301,12 +325,12 @@ func (m *clientSideMap) acquire(ctx context.Context, resourceName string, operat
 	})
 }
 
-func (m *clientSideMap) release(ctx context.Context, resourceName string, operator string) error {
+func (m *clientSideMap) release(ctx context.Context, resourceName string, operator logs.CallerContext) error {
 	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
 
 		_, err := cli.Release(ctx, connect_go.NewRequest(&resource_mapv1.ReleaseRequest{
 			ResourceName: resourceName,
-			ClientId:     operator,
+			Context:      convertCallerContextToPB(operator),
 		}))
 
 		return err

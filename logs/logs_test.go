@@ -45,14 +45,26 @@ func TestInfoStore(t *testing.T) {
 
 		// Store server logs.
 		assert.NilError(t, store.PutServerLog(ServerLog{
-			Event:     ServerEventLaunched,
-			Addr:      "http://localhost:8080",
-			Operator:  "alice",
+			Event: ServerEventLaunched,
+			Addr:  "http://localhost:8080",
+			Context: CallerContext{
+				{
+					File: "alice.go",
+					Line: 10,
+					Hash: "4e5704d7",
+				},
+			},
 			Timestamp: 1694765593803865000,
 		}))
 		assert.NilError(t, store.PutServerLog(ServerLog{
-			Event:     ServerEventStopped,
-			Operator:  "alice",
+			Event: ServerEventStopped,
+			Context: CallerContext{
+				{
+					File: "bob.go",
+					Line: 124,
+					Hash: "9e9e9f3c",
+				},
+			},
 			Timestamp: 1694765603344265000,
 		}))
 
@@ -60,14 +72,26 @@ func TestInfoStore(t *testing.T) {
 		assert.DeepEqual(t, *store.ServerRecord(), ServerRecord{
 			Logs: []ServerLog{
 				{
-					Event:     ServerEventLaunched,
-					Addr:      "http://localhost:8080",
-					Operator:  "alice",
+					Event: ServerEventLaunched,
+					Addr:  "http://localhost:8080",
+					Context: CallerContext{
+						{
+							File: "alice.go",
+							Line: 10,
+							Hash: "4e5704d7",
+						},
+					},
 					Timestamp: 1694765593803865000,
 				},
 				{
-					Event:     ServerEventStopped,
-					Operator:  "alice",
+					Event: ServerEventStopped,
+					Context: CallerContext{
+						{
+							File: "bob.go",
+							Line: 124,
+							Hash: "9e9e9f3c",
+						},
+					},
 					Timestamp: 1694765603344265000,
 				},
 			},
@@ -87,14 +111,26 @@ func TestInfoStore(t *testing.T) {
 	assert.DeepEqual(t, *store.ServerRecord(), ServerRecord{
 		Logs: []ServerLog{
 			{
-				Event:     ServerEventLaunched,
-				Addr:      "http://localhost:8080",
-				Operator:  "alice",
+				Event: ServerEventLaunched,
+				Addr:  "http://localhost:8080",
+				Context: CallerContext{
+					{
+						File: "alice.go",
+						Line: 10,
+						Hash: "4e5704d7",
+					},
+				},
 				Timestamp: 1694765593803865000,
 			},
 			{
-				Event:     ServerEventStopped,
-				Operator:  "alice",
+				Event: ServerEventStopped,
+				Context: CallerContext{
+					{
+						File: "bob.go",
+						Line: 124,
+						Hash: "9e9e9f3c",
+					},
+				},
 				Timestamp: 1694765603344265000,
 			},
 		},
@@ -126,8 +162,19 @@ func TestResourceRecordStore(t *testing.T) {
 			assert.Assert(t, !update)
 
 			r.Logs = append(r.Logs, InitLog{
-				Event:     InitEventStarted,
-				Operator:  "alice",
+				Event: InitEventStarted,
+				Context: CallerContext{
+					{
+						File: "alice.go",
+						Line: 77,
+						Hash: "b6830588",
+					},
+					{
+						File: "alice.go",
+						Line: 342,
+						Hash: "e45ecc5c",
+					},
+				},
 				Timestamp: math.MaxInt64,
 			})
 		}),
@@ -139,8 +186,19 @@ func TestResourceRecordStore(t *testing.T) {
 	assert.DeepEqual(t, *got, InitRecord{
 		Logs: []InitLog{
 			{
-				Event:     InitEventStarted,
-				Operator:  "alice",
+				Event: InitEventStarted,
+				Context: CallerContext{
+					{
+						File: "alice.go",
+						Line: 77,
+						Hash: "b6830588",
+					},
+					{
+						File: "alice.go",
+						Line: 342,
+						Hash: "e45ecc5c",
+					},
+				},
 				Timestamp: math.MaxInt64, // Check serialization for large number.
 			},
 		},
@@ -151,8 +209,19 @@ func TestResourceRecordStore(t *testing.T) {
 		assert.Assert(t, !update)
 
 		r.Logs = append(r.Logs, InitLog{
-			Event:     InitEventStarted,
-			Operator:  "bob",
+			Event: InitEventStarted,
+			Context: CallerContext{
+				{
+					File: "bob.go",
+					Line: 12,
+					Hash: "335f4b5d",
+				},
+				{
+					File: "bob.go",
+					Line: 76,
+					Hash: "1b42d1e9",
+				},
+			},
 			Timestamp: 1694765621790751000,
 		})
 	}))
@@ -161,8 +230,19 @@ func TestResourceRecordStore(t *testing.T) {
 		assert.Assert(t, update)
 
 		r.Logs = append(r.Logs, InitLog{
-			Event:     InitEventCompleted,
-			Operator:  "bob",
+			Event: InitEventCompleted,
+			Context: CallerContext{
+				{
+					File: "bob.go",
+					Line: 12,
+					Hash: "335f4b5d",
+				},
+				{
+					File: "bob.go",
+					Line: 149,
+					Hash: "2c9c21db",
+				},
+			},
 			Timestamp: 1694765637968901000,
 		})
 	}))
@@ -172,8 +252,19 @@ func TestResourceRecordStore(t *testing.T) {
 		assert.DeepEqual(t, *got, InitRecord{
 			Logs: []InitLog{
 				{
-					Event:     InitEventStarted,
-					Operator:  "alice",
+					Event: InitEventStarted,
+					Context: CallerContext{
+						{
+							File: "alice.go",
+							Line: 77,
+							Hash: "b6830588",
+						},
+						{
+							File: "alice.go",
+							Line: 342,
+							Hash: "e45ecc5c",
+						},
+					},
 					Timestamp: math.MaxInt64,
 				},
 			},
@@ -183,12 +274,34 @@ func TestResourceRecordStore(t *testing.T) {
 		assert.DeepEqual(t, *got, InitRecord{
 			Logs: []InitLog{
 				{
-					Event:     InitEventStarted,
-					Operator:  "bob",
+					Event: InitEventStarted,
+					Context: CallerContext{
+						{
+							File: "bob.go",
+							Line: 12,
+							Hash: "335f4b5d",
+						},
+						{
+							File: "bob.go",
+							Line: 76,
+							Hash: "1b42d1e9",
+						},
+					},
 					Timestamp: 1694765621790751000,
 				}, {
-					Event:     InitEventCompleted,
-					Operator:  "bob",
+					Event: InitEventCompleted,
+					Context: CallerContext{
+						{
+							File: "bob.go",
+							Line: 12,
+							Hash: "335f4b5d",
+						},
+						{
+							File: "bob.go",
+							Line: 149,
+							Hash: "2c9c21db",
+						},
+					},
 					Timestamp: 1694765637968901000,
 				},
 			},
