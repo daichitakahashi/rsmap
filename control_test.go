@@ -23,6 +23,45 @@ func asyncResult[T any](fn func() T) (result <-chan T) {
 	return ch
 }
 
+var (
+	callerAlice = logs.CallerContext{
+		{
+			File: "alice.go",
+			Line: 10,
+			Hash: "f1237f58",
+		},
+		{
+			File: "alice.go",
+			Line: 87,
+			Hash: "9e9e9f3c",
+		},
+	}
+	callerBob = logs.CallerContext{
+		{
+			File: "bob.go",
+			Line: 8,
+			Hash: "d3803c6e",
+		},
+		{
+			File: "bob.go",
+			Line: 144,
+			Hash: "8695e950",
+		},
+	}
+	callerCharlie = logs.CallerContext{
+		{
+			File: "charlie.go",
+			Line: 88,
+			Hash: "2c9c21db",
+		},
+		{
+			File: "charlie.go",
+			Line: 322,
+			Hash: "349757b7",
+		},
+	}
+)
+
 func TestInitController(t *testing.T) {
 	t.Parallel()
 
@@ -42,7 +81,7 @@ func TestInitController(t *testing.T) {
 		assert.NilError(t, err)
 
 		// Start init by Alice.
-		try, err := ctl.tryInit(background, "treasure", "alice")
+		try, err := ctl.tryInit(background, "treasure", callerAlice)
 		assert.NilError(t, err)
 		assert.Assert(t, try)
 
@@ -52,7 +91,7 @@ func TestInitController(t *testing.T) {
 			err error
 		}
 		bobsTry := asyncResult(func() tryInitResult {
-			try, err := ctl.tryInit(background, "treasure", "bob")
+			try, err := ctl.tryInit(background, "treasure", callerBob)
 			return tryInitResult{
 				try: try,
 				err: err,
@@ -72,7 +111,7 @@ func TestInitController(t *testing.T) {
 
 		// Complete init by Alice.
 		assert.NilError(t,
-			ctl.complete("treasure", "alice"),
+			ctl.complete("treasure", callerAlice),
 		)
 
 		// Check Bob's result again.
@@ -87,11 +126,11 @@ func TestInitController(t *testing.T) {
 		assert.DeepEqual(t, *r, logs.InitRecord{
 			Logs: []logs.InitLog{
 				{
-					Event:    logs.InitEventStarted,
-					Operator: "alice",
+					Event:   logs.InitEventStarted,
+					Context: callerAlice,
 				}, {
-					Event:    logs.InitEventCompleted,
-					Operator: "alice",
+					Event:   logs.InitEventCompleted,
+					Context: callerAlice,
 				},
 			},
 		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
@@ -113,12 +152,12 @@ func TestInitController(t *testing.T) {
 		assert.NilError(t, err)
 
 		// Start init by Alice.
-		try, err := ctl.tryInit(background, "treasure", "alice")
+		try, err := ctl.tryInit(background, "treasure", callerAlice)
 		assert.NilError(t, err)
 		assert.Assert(t, try)
 
 		// Consecutive init.
-		secondTry, err := ctl.tryInit(background, "treasure", "alice")
+		secondTry, err := ctl.tryInit(background, "treasure", callerAlice)
 		assert.NilError(t, err)
 		assert.Equal(t, try, secondTry)
 
@@ -128,8 +167,8 @@ func TestInitController(t *testing.T) {
 		assert.DeepEqual(t, *r, logs.InitRecord{
 			Logs: []logs.InitLog{
 				{
-					Event:    logs.InitEventStarted,
-					Operator: "alice",
+					Event:   logs.InitEventStarted,
+					Context: callerAlice,
 				},
 			},
 		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
@@ -160,7 +199,7 @@ func TestInitController(t *testing.T) {
 			prepared <- struct{}{}
 			<-started
 
-			try, err := ctl.tryInit(background, "treasure", "alice")
+			try, err := ctl.tryInit(background, "treasure", callerAlice)
 			if err != nil {
 				return err
 			}
@@ -168,7 +207,7 @@ func TestInitController(t *testing.T) {
 				return errors.New("try must be true")
 			}
 
-			return ctl.fail("treasure", "alice")
+			return ctl.fail("treasure", callerAlice)
 		})
 
 		eg.Go(func() error {
@@ -176,7 +215,7 @@ func TestInitController(t *testing.T) {
 			<-started
 			time.Sleep(time.Millisecond * 200)
 
-			try, err := ctl.tryInit(background, "treasure", "bob")
+			try, err := ctl.tryInit(background, "treasure", callerBob)
 			if err != nil {
 				return err
 			}
@@ -192,7 +231,7 @@ func TestInitController(t *testing.T) {
 		assert.NilError(t, eg.Wait())
 
 		assert.NilError(t,
-			ctl.complete("treasure", "bob"),
+			ctl.complete("treasure", callerBob),
 		)
 	})
 
@@ -213,7 +252,7 @@ func TestInitController(t *testing.T) {
 			store.Put("treasure", func(r *logs.InitRecord, _ bool) {
 				r.Logs = append(r.Logs, logs.InitLog{
 					Event:     logs.InitEventStarted,
-					Operator:  "alice",
+					Context:   callerAlice,
 					Timestamp: time.Now().UnixNano(),
 				})
 			}),
@@ -225,15 +264,15 @@ func TestInitController(t *testing.T) {
 		// Bob's try, timed out.
 		timedOut, cancel := context.WithDeadline(background, time.Now().Add(time.Millisecond))
 		defer cancel()
-		try, err := ctl.tryInit(timedOut, "treasure", "bob")
+		try, err := ctl.tryInit(timedOut, "treasure", callerBob)
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
 		assert.Assert(t, !try)
 
 		// Alice finishes init operation.
-		assert.NilError(t, ctl.complete("treasure", "alice"))
+		assert.NilError(t, ctl.complete("treasure", callerAlice))
 
 		// Bob receives completion of init.
-		try, err = ctl.tryInit(background, "treasure", "bob")
+		try, err = ctl.tryInit(background, "treasure", callerBob)
 		assert.NilError(t, err)
 		assert.Assert(t, !try)
 
@@ -243,11 +282,11 @@ func TestInitController(t *testing.T) {
 		assert.DeepEqual(t, *r, logs.InitRecord{
 			Logs: []logs.InitLog{
 				{
-					Event:    logs.InitEventStarted,
-					Operator: "alice",
+					Event:   logs.InitEventStarted,
+					Context: callerAlice,
 				}, {
-					Event:    logs.InitEventCompleted,
-					Operator: "alice",
+					Event:   logs.InitEventCompleted,
+					Context: callerAlice,
 				},
 			},
 		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
@@ -271,11 +310,11 @@ func TestInitController(t *testing.T) {
 				r.Logs = append(r.Logs, []logs.InitLog{
 					{
 						Event:     logs.InitEventCompleted,
-						Operator:  "alice",
+						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}, {
 						Event:     logs.InitEventCompleted,
-						Operator:  "alice",
+						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}}...)
 			}),
@@ -285,7 +324,7 @@ func TestInitController(t *testing.T) {
 		assert.NilError(t, err)
 
 		// Bob tries init, but already completed by Alice.
-		try, err := ctl.tryInit(background, "treasure", "bob")
+		try, err := ctl.tryInit(background, "treasure", callerBob)
 		assert.NilError(t, err)
 		assert.Assert(t, !try)
 	})
@@ -306,18 +345,18 @@ func TestInitController(t *testing.T) {
 		assert.NilError(t, err)
 
 		// Setup situation that init has failed.
-		_, err = ctl.tryInit(background, "treasure", "alice")
+		_, err = ctl.tryInit(background, "treasure", callerAlice)
 		assert.NilError(t, err)
-		assert.NilError(t, ctl.fail("treasure", "alice"))
+		assert.NilError(t, ctl.fail("treasure", callerAlice))
 
 		replayed, err := loadInitController(store)
 		assert.NilError(t, err)
 
 		// Bob retries.
-		try, err := replayed.tryInit(background, "treasure", "bob")
+		try, err := replayed.tryInit(background, "treasure", callerBob)
 		assert.NilError(t, err)
 		assert.Assert(t, try)
-		assert.NilError(t, replayed.complete("treasure", "bob"))
+		assert.NilError(t, replayed.complete("treasure", callerBob))
 	})
 }
 
@@ -341,34 +380,34 @@ func TestAcquireController(t *testing.T) {
 
 		// Acquire shared lock by Alice and Bob.
 		assert.NilError(t,
-			ctl.acquire(background, "treasure", "alice", 100, false),
+			ctl.acquire(background, "treasure", callerAlice, 100, false),
 		)
 		assert.NilError(t,
-			ctl.acquire(background, "treasure", "bob", 100, false),
+			ctl.acquire(background, "treasure", callerBob, 100, false),
 		)
 
 		// Acquisition of exclusive lock by Charlie should be failed.
 		timedOut, cancel := context.WithTimeout(background, time.Millisecond*100)
 		defer cancel()
 		assert.ErrorIs(t,
-			ctl.acquire(timedOut, "treasure", "charlie", 100, true),
+			ctl.acquire(timedOut, "treasure", callerCharlie, 100, true),
 			context.DeadlineExceeded,
 		)
 
 		// Release shared locks.
 		assert.NilError(t,
-			ctl.release("treasure", "alice"),
+			ctl.release("treasure", callerAlice),
 		)
 		assert.NilError(t,
-			ctl.release("treasure", "bob"),
+			ctl.release("treasure", callerBob),
 		)
 
 		// Retry of Charlie.
 		assert.NilError(t,
-			ctl.acquire(background, "treasure", "charlie", 100, true),
+			ctl.acquire(background, "treasure", callerCharlie, 100, true),
 		)
 		assert.NilError(t,
-			ctl.release("treasure", "charlie"),
+			ctl.release("treasure", callerCharlie),
 		)
 
 		// Check stored logs.
@@ -378,26 +417,26 @@ func TestAcquireController(t *testing.T) {
 			Max: 100,
 			Logs: []logs.AcquireLog{
 				{
-					Event:    logs.AcquireEventAcquired,
-					N:        1,
-					Operator: "alice",
+					Event:   logs.AcquireEventAcquired,
+					N:       1,
+					Context: callerAlice,
 				}, {
-					Event:    logs.AcquireEventAcquired,
-					N:        1,
-					Operator: "bob",
+					Event:   logs.AcquireEventAcquired,
+					N:       1,
+					Context: callerBob,
 				}, {
-					Event:    logs.AcquireEventReleased,
-					Operator: "alice",
+					Event:   logs.AcquireEventReleased,
+					Context: callerAlice,
 				}, {
-					Event:    logs.AcquireEventReleased,
-					Operator: "bob",
+					Event:   logs.AcquireEventReleased,
+					Context: callerBob,
 				}, {
-					Event:    logs.AcquireEventAcquired,
-					N:        100,
-					Operator: "charlie",
+					Event:   logs.AcquireEventAcquired,
+					N:       100,
+					Context: callerCharlie,
 				}, {
-					Event:    logs.AcquireEventReleased,
-					Operator: "charlie",
+					Event:   logs.AcquireEventReleased,
+					Context: callerCharlie,
 				},
 			},
 		}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
@@ -420,20 +459,20 @@ func TestAcquireController(t *testing.T) {
 
 		// First acquisition.
 		assert.NilError(t,
-			ctl.acquire(background, "treasure", "alice", 100, true),
+			ctl.acquire(background, "treasure", callerAlice, 100, true),
 		)
 		// Second acquisition without error(not acquired actually).
 		assert.NilError(t,
-			ctl.acquire(background, "treasure", "alice", 100, true),
+			ctl.acquire(background, "treasure", callerAlice, 100, true),
 		)
 
 		// First release.
 		assert.NilError(t,
-			ctl.release("treasure", "alice"),
+			ctl.release("treasure", callerAlice),
 		)
 		// Second release without error(already released).
 		assert.NilError(t,
-			ctl.release("treasure", "alice"),
+			ctl.release("treasure", callerAlice),
 		)
 
 		// Check stored logs.
@@ -443,13 +482,13 @@ func TestAcquireController(t *testing.T) {
 			Max: 100,
 			Logs: []logs.AcquireLog{
 				{
-					Event:    logs.AcquireEventAcquired,
-					N:        100,
-					Operator: "alice",
+					Event:   logs.AcquireEventAcquired,
+					N:       100,
+					Context: callerAlice,
 				}, {
-					Event:    logs.AcquireEventReleased,
-					N:        0,
-					Operator: "alice",
+					Event:   logs.AcquireEventReleased,
+					N:       0,
+					Context: callerAlice,
 				},
 			},
 		}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
@@ -475,16 +514,16 @@ func TestAcquireController(t *testing.T) {
 					{
 						Event:     logs.AcquireEventAcquired,
 						N:         10,
-						Operator:  "alice",
+						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}, {
 						Event:     logs.AcquireEventReleased,
-						Operator:  "alice",
+						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}, {
 						Event:     logs.AcquireEventAcquired,
 						N:         1,
-						Operator:  "alice",
+						Context:   callerAlice,
 						Timestamp: 0,
 					},
 				}...)
@@ -497,7 +536,7 @@ func TestAcquireController(t *testing.T) {
 					{
 						Event:     logs.AcquireEventAcquired,
 						N:         200,
-						Operator:  "alice",
+						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					},
 				}...)
@@ -512,19 +551,19 @@ func TestAcquireController(t *testing.T) {
 
 			// Alice's consecutive acquisition is ignored.
 			assert.NilError(t,
-				ctl.acquire(background, "treasure", "alice", 10, false),
+				ctl.acquire(background, "treasure", callerAlice, 10, false),
 			)
 
 			// Bob's trial to acquire exclusive lock will be timed out.
 			timedOut, cancel := context.WithTimeout(background, time.Millisecond*100)
 			defer cancel()
 			assert.ErrorIs(t,
-				ctl.acquire(timedOut, "treasure", "bob", 10, true),
+				ctl.acquire(timedOut, "treasure", callerBob, 10, true),
 				context.DeadlineExceeded,
 			)
 			// But shared lock can be acquired.
 			assert.NilError(t,
-				ctl.acquire(background, "treasure", "bob", 10, false),
+				ctl.acquire(background, "treasure", callerBob, 10, false),
 			)
 
 			// Check stored logs.
@@ -534,20 +573,20 @@ func TestAcquireController(t *testing.T) {
 				Max: 10,
 				Logs: []logs.AcquireLog{
 					{
-						Event:    logs.AcquireEventAcquired,
-						N:        10,
-						Operator: "alice",
+						Event:   logs.AcquireEventAcquired,
+						N:       10,
+						Context: callerAlice,
 					}, {
-						Event:    logs.AcquireEventReleased,
-						Operator: "alice",
+						Event:   logs.AcquireEventReleased,
+						Context: callerAlice,
 					}, {
-						Event:    logs.AcquireEventAcquired,
-						N:        1,
-						Operator: "alice",
+						Event:   logs.AcquireEventAcquired,
+						N:       1,
+						Context: callerAlice,
 					}, {
-						Event:    logs.AcquireEventAcquired,
-						N:        1,
-						Operator: "bob",
+						Event:   logs.AcquireEventAcquired,
+						N:       1,
+						Context: callerBob,
 					},
 				},
 			}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
@@ -560,18 +599,18 @@ func TestAcquireController(t *testing.T) {
 			timedOut, cancel := context.WithTimeout(background, time.Millisecond*100)
 			defer cancel()
 			assert.ErrorIs(t,
-				ctl.acquire(timedOut, "precious", "bob", 200, false),
+				ctl.acquire(timedOut, "precious", callerBob, 200, false),
 				context.DeadlineExceeded,
 			)
 
 			// Release by Alice.
 			assert.NilError(t,
-				ctl.release("precious", "alice"),
+				ctl.release("precious", callerAlice),
 			)
 
 			// Bob's acquisition succeeds now.
 			assert.NilError(t,
-				ctl.acquire(background, "precious", "bob", 200, false),
+				ctl.acquire(background, "precious", callerBob, 200, false),
 			)
 
 			// Check stored logs.
@@ -581,16 +620,16 @@ func TestAcquireController(t *testing.T) {
 				Max: 200,
 				Logs: []logs.AcquireLog{
 					{
-						Event:    logs.AcquireEventAcquired,
-						N:        200,
-						Operator: "alice",
+						Event:   logs.AcquireEventAcquired,
+						N:       200,
+						Context: callerAlice,
 					}, {
-						Event:    logs.AcquireEventReleased,
-						Operator: "alice",
+						Event:   logs.AcquireEventReleased,
+						Context: callerAlice,
 					}, {
-						Event:    logs.AcquireEventAcquired,
-						N:        1,
-						Operator: "bob",
+						Event:   logs.AcquireEventAcquired,
+						N:       1,
+						Context: callerBob,
 					},
 				},
 			}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))

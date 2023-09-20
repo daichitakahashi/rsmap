@@ -20,19 +20,82 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type Caller struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	File string `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	Line int64  `protobuf:"varint,2,opt,name=line,proto3" json:"line,omitempty"`
+	Hash string `protobuf:"bytes,3,opt,name=hash,proto3" json:"hash,omitempty"`
+}
+
+func (x *Caller) Reset() {
+	*x = Caller{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Caller) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Caller) ProtoMessage() {}
+
+func (x *Caller) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[0]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Caller.ProtoReflect.Descriptor instead.
+func (*Caller) Descriptor() ([]byte, []int) {
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Caller) GetFile() string {
+	if x != nil {
+		return x.File
+	}
+	return ""
+}
+
+func (x *Caller) GetLine() int64 {
+	if x != nil {
+		return x.Line
+	}
+	return 0
+}
+
+func (x *Caller) GetHash() string {
+	if x != nil {
+		return x.Hash
+	}
+	return ""
+}
+
 type TryInitResourceRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ResourceName string `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
-	ClientId     string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ResourceName string    `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	Context      []*Caller `protobuf:"bytes,3,rep,name=context,proto3" json:"context,omitempty"`
 }
 
 func (x *TryInitResourceRequest) Reset() {
 	*x = TryInitResourceRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[0]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -45,7 +108,7 @@ func (x *TryInitResourceRequest) String() string {
 func (*TryInitResourceRequest) ProtoMessage() {}
 
 func (x *TryInitResourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[0]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +121,7 @@ func (x *TryInitResourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TryInitResourceRequest.ProtoReflect.Descriptor instead.
 func (*TryInitResourceRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{0}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *TryInitResourceRequest) GetResourceName() string {
@@ -68,11 +131,11 @@ func (x *TryInitResourceRequest) GetResourceName() string {
 	return ""
 }
 
-func (x *TryInitResourceRequest) GetClientId() string {
+func (x *TryInitResourceRequest) GetContext() []*Caller {
 	if x != nil {
-		return x.ClientId
+		return x.Context
 	}
-	return ""
+	return nil
 }
 
 type TryInitResourceResponse struct {
@@ -86,7 +149,7 @@ type TryInitResourceResponse struct {
 func (x *TryInitResourceResponse) Reset() {
 	*x = TryInitResourceResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[1]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -99,7 +162,7 @@ func (x *TryInitResourceResponse) String() string {
 func (*TryInitResourceResponse) ProtoMessage() {}
 
 func (x *TryInitResourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[1]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -112,7 +175,7 @@ func (x *TryInitResourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TryInitResourceResponse.ProtoReflect.Descriptor instead.
 func (*TryInitResourceResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{1}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *TryInitResourceResponse) GetShouldTry() bool {
@@ -127,14 +190,14 @@ type CompleteInitResourceRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ResourceName string `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
-	ClientId     string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ResourceName string    `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	Context      []*Caller `protobuf:"bytes,3,rep,name=context,proto3" json:"context,omitempty"`
 }
 
 func (x *CompleteInitResourceRequest) Reset() {
 	*x = CompleteInitResourceRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[2]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -147,7 +210,7 @@ func (x *CompleteInitResourceRequest) String() string {
 func (*CompleteInitResourceRequest) ProtoMessage() {}
 
 func (x *CompleteInitResourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[2]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -160,7 +223,7 @@ func (x *CompleteInitResourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteInitResourceRequest.ProtoReflect.Descriptor instead.
 func (*CompleteInitResourceRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{2}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CompleteInitResourceRequest) GetResourceName() string {
@@ -170,11 +233,11 @@ func (x *CompleteInitResourceRequest) GetResourceName() string {
 	return ""
 }
 
-func (x *CompleteInitResourceRequest) GetClientId() string {
+func (x *CompleteInitResourceRequest) GetContext() []*Caller {
 	if x != nil {
-		return x.ClientId
+		return x.Context
 	}
-	return ""
+	return nil
 }
 
 type CompleteInitResourceResponse struct {
@@ -186,7 +249,7 @@ type CompleteInitResourceResponse struct {
 func (x *CompleteInitResourceResponse) Reset() {
 	*x = CompleteInitResourceResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[3]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -199,7 +262,7 @@ func (x *CompleteInitResourceResponse) String() string {
 func (*CompleteInitResourceResponse) ProtoMessage() {}
 
 func (x *CompleteInitResourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[3]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -212,7 +275,7 @@ func (x *CompleteInitResourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteInitResourceResponse.ProtoReflect.Descriptor instead.
 func (*CompleteInitResourceResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{3}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{4}
 }
 
 type FailInitResourceRequest struct {
@@ -220,14 +283,14 @@ type FailInitResourceRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ResourceName string `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
-	ClientId     string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ResourceName string    `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	Context      []*Caller `protobuf:"bytes,3,rep,name=context,proto3" json:"context,omitempty"`
 }
 
 func (x *FailInitResourceRequest) Reset() {
 	*x = FailInitResourceRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[4]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -240,7 +303,7 @@ func (x *FailInitResourceRequest) String() string {
 func (*FailInitResourceRequest) ProtoMessage() {}
 
 func (x *FailInitResourceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[4]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -253,7 +316,7 @@ func (x *FailInitResourceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailInitResourceRequest.ProtoReflect.Descriptor instead.
 func (*FailInitResourceRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{4}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *FailInitResourceRequest) GetResourceName() string {
@@ -263,11 +326,11 @@ func (x *FailInitResourceRequest) GetResourceName() string {
 	return ""
 }
 
-func (x *FailInitResourceRequest) GetClientId() string {
+func (x *FailInitResourceRequest) GetContext() []*Caller {
 	if x != nil {
-		return x.ClientId
+		return x.Context
 	}
-	return ""
+	return nil
 }
 
 type FailInitResourceResponse struct {
@@ -279,7 +342,7 @@ type FailInitResourceResponse struct {
 func (x *FailInitResourceResponse) Reset() {
 	*x = FailInitResourceResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[5]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -292,7 +355,7 @@ func (x *FailInitResourceResponse) String() string {
 func (*FailInitResourceResponse) ProtoMessage() {}
 
 func (x *FailInitResourceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[5]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -305,7 +368,7 @@ func (x *FailInitResourceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FailInitResourceResponse.ProtoReflect.Descriptor instead.
 func (*FailInitResourceResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{5}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{6}
 }
 
 type AcquireRequest struct {
@@ -313,16 +376,16 @@ type AcquireRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ResourceName   string `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
-	ClientId       string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
-	MaxParallelism int64  `protobuf:"varint,3,opt,name=max_parallelism,json=maxParallelism,proto3" json:"max_parallelism,omitempty"`
-	Exclusive      bool   `protobuf:"varint,4,opt,name=exclusive,proto3" json:"exclusive,omitempty"`
+	ResourceName   string    `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	Context        []*Caller `protobuf:"bytes,5,rep,name=context,proto3" json:"context,omitempty"`
+	MaxParallelism int64     `protobuf:"varint,3,opt,name=max_parallelism,json=maxParallelism,proto3" json:"max_parallelism,omitempty"`
+	Exclusive      bool      `protobuf:"varint,4,opt,name=exclusive,proto3" json:"exclusive,omitempty"`
 }
 
 func (x *AcquireRequest) Reset() {
 	*x = AcquireRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[6]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -335,7 +398,7 @@ func (x *AcquireRequest) String() string {
 func (*AcquireRequest) ProtoMessage() {}
 
 func (x *AcquireRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[6]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -348,7 +411,7 @@ func (x *AcquireRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcquireRequest.ProtoReflect.Descriptor instead.
 func (*AcquireRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{6}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *AcquireRequest) GetResourceName() string {
@@ -358,11 +421,11 @@ func (x *AcquireRequest) GetResourceName() string {
 	return ""
 }
 
-func (x *AcquireRequest) GetClientId() string {
+func (x *AcquireRequest) GetContext() []*Caller {
 	if x != nil {
-		return x.ClientId
+		return x.Context
 	}
-	return ""
+	return nil
 }
 
 func (x *AcquireRequest) GetMaxParallelism() int64 {
@@ -388,7 +451,7 @@ type AcquireResponse struct {
 func (x *AcquireResponse) Reset() {
 	*x = AcquireResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[7]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -401,7 +464,7 @@ func (x *AcquireResponse) String() string {
 func (*AcquireResponse) ProtoMessage() {}
 
 func (x *AcquireResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[7]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -414,7 +477,7 @@ func (x *AcquireResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcquireResponse.ProtoReflect.Descriptor instead.
 func (*AcquireResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{7}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{8}
 }
 
 type ReleaseRequest struct {
@@ -422,14 +485,14 @@ type ReleaseRequest struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	ResourceName string `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
-	ClientId     string `protobuf:"bytes,2,opt,name=client_id,json=clientId,proto3" json:"client_id,omitempty"`
+	ResourceName string    `protobuf:"bytes,1,opt,name=resource_name,json=resourceName,proto3" json:"resource_name,omitempty"`
+	Context      []*Caller `protobuf:"bytes,3,rep,name=context,proto3" json:"context,omitempty"`
 }
 
 func (x *ReleaseRequest) Reset() {
 	*x = ReleaseRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[8]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -442,7 +505,7 @@ func (x *ReleaseRequest) String() string {
 func (*ReleaseRequest) ProtoMessage() {}
 
 func (x *ReleaseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[8]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -455,7 +518,7 @@ func (x *ReleaseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseRequest) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{8}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ReleaseRequest) GetResourceName() string {
@@ -465,11 +528,11 @@ func (x *ReleaseRequest) GetResourceName() string {
 	return ""
 }
 
-func (x *ReleaseRequest) GetClientId() string {
+func (x *ReleaseRequest) GetContext() []*Caller {
 	if x != nil {
-		return x.ClientId
+		return x.Context
 	}
-	return ""
+	return nil
 }
 
 type ReleaseResponse struct {
@@ -481,7 +544,7 @@ type ReleaseResponse struct {
 func (x *ReleaseResponse) Reset() {
 	*x = ReleaseResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[9]
+		mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -494,7 +557,7 @@ func (x *ReleaseResponse) String() string {
 func (*ReleaseResponse) ProtoMessage() {}
 
 func (x *ReleaseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[9]
+	mi := &file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -507,7 +570,7 @@ func (x *ReleaseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseResponse.ProtoReflect.Descriptor instead.
 func (*ReleaseResponse) Descriptor() ([]byte, []int) {
-	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{9}
+	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP(), []int{10}
 }
 
 var File_internal_proto_resource_map_v1_resource_map_proto protoreflect.FileDescriptor
@@ -518,48 +581,66 @@ var file_internal_proto_resource_map_v1_resource_map_proto_rawDesc = []byte{
 	0x2f, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6d, 0x61, 0x70, 0x2e, 0x70, 0x72,
 	0x6f, 0x74, 0x6f, 0x12, 0x1e, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2e, 0x70, 0x72,
 	0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6d, 0x61, 0x70,
-	0x2e, 0x76, 0x31, 0x22, 0x5a, 0x0a, 0x16, 0x54, 0x72, 0x79, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65,
-	0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x23, 0x0a,
-	0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61,
-	0x6d, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18,
-	0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x22,
-	0x38, 0x0a, 0x17, 0x54, 0x72, 0x79, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72,
-	0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x73, 0x68,
-	0x6f, 0x75, 0x6c, 0x64, 0x5f, 0x74, 0x72, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08, 0x52, 0x09,
-	0x73, 0x68, 0x6f, 0x75, 0x6c, 0x64, 0x54, 0x72, 0x79, 0x22, 0x5f, 0x0a, 0x1b, 0x43, 0x6f, 0x6d,
-	0x70, 0x6c, 0x65, 0x74, 0x65, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63,
-	0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f,
-	0x75, 0x72, 0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x0c, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1b, 0x0a,
-	0x09, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x08, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x22, 0x1e, 0x0a, 0x1c, 0x43, 0x6f,
-	0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72,
-	0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x5b, 0x0a, 0x17, 0x46, 0x61,
-	0x69, 0x6c, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63,
-	0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x72, 0x65,
-	0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x63, 0x6c,
-	0x69, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x63,
-	0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x22, 0x1a, 0x0a, 0x18, 0x46, 0x61, 0x69, 0x6c, 0x49,
-	0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x22, 0x99, 0x01, 0x0a, 0x0e, 0x41, 0x63, 0x71, 0x75, 0x69, 0x72, 0x65, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72,
-	0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x72,
-	0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x63,
-	0x6c, 0x69, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08,
-	0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x27, 0x0a, 0x0f, 0x6d, 0x61, 0x78, 0x5f,
-	0x70, 0x61, 0x72, 0x61, 0x6c, 0x6c, 0x65, 0x6c, 0x69, 0x73, 0x6d, 0x18, 0x03, 0x20, 0x01, 0x28,
-	0x03, 0x52, 0x0e, 0x6d, 0x61, 0x78, 0x50, 0x61, 0x72, 0x61, 0x6c, 0x6c, 0x65, 0x6c, 0x69, 0x73,
-	0x6d, 0x12, 0x1c, 0x0a, 0x09, 0x65, 0x78, 0x63, 0x6c, 0x75, 0x73, 0x69, 0x76, 0x65, 0x18, 0x04,
-	0x20, 0x01, 0x28, 0x08, 0x52, 0x09, 0x65, 0x78, 0x63, 0x6c, 0x75, 0x73, 0x69, 0x76, 0x65, 0x22,
-	0x11, 0x0a, 0x0f, 0x41, 0x63, 0x71, 0x75, 0x69, 0x72, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x22, 0x52, 0x0a, 0x0e, 0x52, 0x65, 0x6c, 0x65, 0x61, 0x73, 0x65, 0x52, 0x65, 0x71,
+	0x2e, 0x76, 0x31, 0x22, 0x44, 0x0a, 0x06, 0x43, 0x61, 0x6c, 0x6c, 0x65, 0x72, 0x12, 0x12, 0x0a,
+	0x04, 0x66, 0x69, 0x6c, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x66, 0x69, 0x6c,
+	0x65, 0x12, 0x12, 0x0a, 0x04, 0x6c, 0x69, 0x6e, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52,
+	0x04, 0x6c, 0x69, 0x6e, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x68, 0x61, 0x73, 0x68, 0x18, 0x03, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x04, 0x68, 0x61, 0x73, 0x68, 0x22, 0x85, 0x01, 0x0a, 0x16, 0x54, 0x72,
+	0x79, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x71,
 	0x75, 0x65, 0x73, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65,
 	0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x72, 0x65, 0x73,
-	0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x63, 0x6c, 0x69,
-	0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x63, 0x6c,
-	0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x22, 0x11, 0x0a, 0x0f, 0x52, 0x65, 0x6c, 0x65, 0x61, 0x73,
+	0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x40, 0x0a, 0x07, 0x63, 0x6f, 0x6e,
+	0x74, 0x65, 0x78, 0x74, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x26, 0x2e, 0x69, 0x6e, 0x74,
+	0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x65, 0x73, 0x6f,
+	0x75, 0x72, 0x63, 0x65, 0x5f, 0x6d, 0x61, 0x70, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x61, 0x6c, 0x6c,
+	0x65, 0x72, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x4a, 0x04, 0x08, 0x02, 0x10,
+	0x03, 0x22, 0x38, 0x0a, 0x17, 0x54, 0x72, 0x79, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f,
+	0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d, 0x0a, 0x0a,
+	0x73, 0x68, 0x6f, 0x75, 0x6c, 0x64, 0x5f, 0x74, 0x72, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x08,
+	0x52, 0x09, 0x73, 0x68, 0x6f, 0x75, 0x6c, 0x64, 0x54, 0x72, 0x79, 0x22, 0x8a, 0x01, 0x0a, 0x1b,
+	0x43, 0x6f, 0x6d, 0x70, 0x6c, 0x65, 0x74, 0x65, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f,
+	0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72,
+	0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x0c, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65,
+	0x12, 0x40, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x18, 0x03, 0x20, 0x03, 0x28,
+	0x0b, 0x32, 0x26, 0x2e, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x2e, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6d, 0x61, 0x70, 0x2e,
+	0x76, 0x31, 0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x65, 0x72, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65,
+	0x78, 0x74, 0x4a, 0x04, 0x08, 0x02, 0x10, 0x03, 0x22, 0x1e, 0x0a, 0x1c, 0x43, 0x6f, 0x6d, 0x70,
+	0x6c, 0x65, 0x74, 0x65, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x86, 0x01, 0x0a, 0x17, 0x46, 0x61, 0x69,
+	0x6c, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65,
+	0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x72, 0x65, 0x73,
+	0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x40, 0x0a, 0x07, 0x63, 0x6f, 0x6e,
+	0x74, 0x65, 0x78, 0x74, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x26, 0x2e, 0x69, 0x6e, 0x74,
+	0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x65, 0x73, 0x6f,
+	0x75, 0x72, 0x63, 0x65, 0x5f, 0x6d, 0x61, 0x70, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x61, 0x6c, 0x6c,
+	0x65, 0x72, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x4a, 0x04, 0x08, 0x02, 0x10,
+	0x03, 0x22, 0x1a, 0x0a, 0x18, 0x46, 0x61, 0x69, 0x6c, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73,
+	0x6f, 0x75, 0x72, 0x63, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0xc4, 0x01,
+	0x0a, 0x0e, 0x41, 0x63, 0x71, 0x75, 0x69, 0x72, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d,
+	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0c, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63,
+	0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x40, 0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74,
+	0x18, 0x05, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x26, 0x2e, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61,
+	0x6c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65,
+	0x5f, 0x6d, 0x61, 0x70, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x65, 0x72, 0x52, 0x07,
+	0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x12, 0x27, 0x0a, 0x0f, 0x6d, 0x61, 0x78, 0x5f, 0x70,
+	0x61, 0x72, 0x61, 0x6c, 0x6c, 0x65, 0x6c, 0x69, 0x73, 0x6d, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03,
+	0x52, 0x0e, 0x6d, 0x61, 0x78, 0x50, 0x61, 0x72, 0x61, 0x6c, 0x6c, 0x65, 0x6c, 0x69, 0x73, 0x6d,
+	0x12, 0x1c, 0x0a, 0x09, 0x65, 0x78, 0x63, 0x6c, 0x75, 0x73, 0x69, 0x76, 0x65, 0x18, 0x04, 0x20,
+	0x01, 0x28, 0x08, 0x52, 0x09, 0x65, 0x78, 0x63, 0x6c, 0x75, 0x73, 0x69, 0x76, 0x65, 0x4a, 0x04,
+	0x08, 0x02, 0x10, 0x03, 0x22, 0x11, 0x0a, 0x0f, 0x41, 0x63, 0x71, 0x75, 0x69, 0x72, 0x65, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x7d, 0x0a, 0x0e, 0x52, 0x65, 0x6c, 0x65, 0x61,
+	0x73, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x23, 0x0a, 0x0d, 0x72, 0x65, 0x73,
+	0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
+	0x52, 0x0c, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4e, 0x61, 0x6d, 0x65, 0x12, 0x40,
+	0x0a, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32,
+	0x26, 0x2e, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2e, 0x72, 0x65, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x6d, 0x61, 0x70, 0x2e, 0x76, 0x31,
+	0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x65, 0x72, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74,
+	0x4a, 0x04, 0x08, 0x02, 0x10, 0x03, 0x22, 0x11, 0x0a, 0x0f, 0x52, 0x65, 0x6c, 0x65, 0x61, 0x73,
 	0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x8d, 0x05, 0x0a, 0x12, 0x52, 0x65,
 	0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x4d, 0x61, 0x70, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65,
 	0x12, 0x82, 0x01, 0x0a, 0x0f, 0x54, 0x72, 0x79, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x73, 0x6f,
@@ -635,35 +716,41 @@ func file_internal_proto_resource_map_v1_resource_map_proto_rawDescGZIP() []byte
 	return file_internal_proto_resource_map_v1_resource_map_proto_rawDescData
 }
 
-var file_internal_proto_resource_map_v1_resource_map_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_internal_proto_resource_map_v1_resource_map_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_internal_proto_resource_map_v1_resource_map_proto_goTypes = []interface{}{
-	(*TryInitResourceRequest)(nil),       // 0: internal.proto.resource_map.v1.TryInitResourceRequest
-	(*TryInitResourceResponse)(nil),      // 1: internal.proto.resource_map.v1.TryInitResourceResponse
-	(*CompleteInitResourceRequest)(nil),  // 2: internal.proto.resource_map.v1.CompleteInitResourceRequest
-	(*CompleteInitResourceResponse)(nil), // 3: internal.proto.resource_map.v1.CompleteInitResourceResponse
-	(*FailInitResourceRequest)(nil),      // 4: internal.proto.resource_map.v1.FailInitResourceRequest
-	(*FailInitResourceResponse)(nil),     // 5: internal.proto.resource_map.v1.FailInitResourceResponse
-	(*AcquireRequest)(nil),               // 6: internal.proto.resource_map.v1.AcquireRequest
-	(*AcquireResponse)(nil),              // 7: internal.proto.resource_map.v1.AcquireResponse
-	(*ReleaseRequest)(nil),               // 8: internal.proto.resource_map.v1.ReleaseRequest
-	(*ReleaseResponse)(nil),              // 9: internal.proto.resource_map.v1.ReleaseResponse
+	(*Caller)(nil),                       // 0: internal.proto.resource_map.v1.Caller
+	(*TryInitResourceRequest)(nil),       // 1: internal.proto.resource_map.v1.TryInitResourceRequest
+	(*TryInitResourceResponse)(nil),      // 2: internal.proto.resource_map.v1.TryInitResourceResponse
+	(*CompleteInitResourceRequest)(nil),  // 3: internal.proto.resource_map.v1.CompleteInitResourceRequest
+	(*CompleteInitResourceResponse)(nil), // 4: internal.proto.resource_map.v1.CompleteInitResourceResponse
+	(*FailInitResourceRequest)(nil),      // 5: internal.proto.resource_map.v1.FailInitResourceRequest
+	(*FailInitResourceResponse)(nil),     // 6: internal.proto.resource_map.v1.FailInitResourceResponse
+	(*AcquireRequest)(nil),               // 7: internal.proto.resource_map.v1.AcquireRequest
+	(*AcquireResponse)(nil),              // 8: internal.proto.resource_map.v1.AcquireResponse
+	(*ReleaseRequest)(nil),               // 9: internal.proto.resource_map.v1.ReleaseRequest
+	(*ReleaseResponse)(nil),              // 10: internal.proto.resource_map.v1.ReleaseResponse
 }
 var file_internal_proto_resource_map_v1_resource_map_proto_depIdxs = []int32{
-	0, // 0: internal.proto.resource_map.v1.ResourceMapService.TryInitResource:input_type -> internal.proto.resource_map.v1.TryInitResourceRequest
-	2, // 1: internal.proto.resource_map.v1.ResourceMapService.CompleteInitResource:input_type -> internal.proto.resource_map.v1.CompleteInitResourceRequest
-	4, // 2: internal.proto.resource_map.v1.ResourceMapService.FailInitResource:input_type -> internal.proto.resource_map.v1.FailInitResourceRequest
-	6, // 3: internal.proto.resource_map.v1.ResourceMapService.Acquire:input_type -> internal.proto.resource_map.v1.AcquireRequest
-	8, // 4: internal.proto.resource_map.v1.ResourceMapService.Release:input_type -> internal.proto.resource_map.v1.ReleaseRequest
-	1, // 5: internal.proto.resource_map.v1.ResourceMapService.TryInitResource:output_type -> internal.proto.resource_map.v1.TryInitResourceResponse
-	3, // 6: internal.proto.resource_map.v1.ResourceMapService.CompleteInitResource:output_type -> internal.proto.resource_map.v1.CompleteInitResourceResponse
-	5, // 7: internal.proto.resource_map.v1.ResourceMapService.FailInitResource:output_type -> internal.proto.resource_map.v1.FailInitResourceResponse
-	7, // 8: internal.proto.resource_map.v1.ResourceMapService.Acquire:output_type -> internal.proto.resource_map.v1.AcquireResponse
-	9, // 9: internal.proto.resource_map.v1.ResourceMapService.Release:output_type -> internal.proto.resource_map.v1.ReleaseResponse
-	5, // [5:10] is the sub-list for method output_type
-	0, // [0:5] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0,  // 0: internal.proto.resource_map.v1.TryInitResourceRequest.context:type_name -> internal.proto.resource_map.v1.Caller
+	0,  // 1: internal.proto.resource_map.v1.CompleteInitResourceRequest.context:type_name -> internal.proto.resource_map.v1.Caller
+	0,  // 2: internal.proto.resource_map.v1.FailInitResourceRequest.context:type_name -> internal.proto.resource_map.v1.Caller
+	0,  // 3: internal.proto.resource_map.v1.AcquireRequest.context:type_name -> internal.proto.resource_map.v1.Caller
+	0,  // 4: internal.proto.resource_map.v1.ReleaseRequest.context:type_name -> internal.proto.resource_map.v1.Caller
+	1,  // 5: internal.proto.resource_map.v1.ResourceMapService.TryInitResource:input_type -> internal.proto.resource_map.v1.TryInitResourceRequest
+	3,  // 6: internal.proto.resource_map.v1.ResourceMapService.CompleteInitResource:input_type -> internal.proto.resource_map.v1.CompleteInitResourceRequest
+	5,  // 7: internal.proto.resource_map.v1.ResourceMapService.FailInitResource:input_type -> internal.proto.resource_map.v1.FailInitResourceRequest
+	7,  // 8: internal.proto.resource_map.v1.ResourceMapService.Acquire:input_type -> internal.proto.resource_map.v1.AcquireRequest
+	9,  // 9: internal.proto.resource_map.v1.ResourceMapService.Release:input_type -> internal.proto.resource_map.v1.ReleaseRequest
+	2,  // 10: internal.proto.resource_map.v1.ResourceMapService.TryInitResource:output_type -> internal.proto.resource_map.v1.TryInitResourceResponse
+	4,  // 11: internal.proto.resource_map.v1.ResourceMapService.CompleteInitResource:output_type -> internal.proto.resource_map.v1.CompleteInitResourceResponse
+	6,  // 12: internal.proto.resource_map.v1.ResourceMapService.FailInitResource:output_type -> internal.proto.resource_map.v1.FailInitResourceResponse
+	8,  // 13: internal.proto.resource_map.v1.ResourceMapService.Acquire:output_type -> internal.proto.resource_map.v1.AcquireResponse
+	10, // 14: internal.proto.resource_map.v1.ResourceMapService.Release:output_type -> internal.proto.resource_map.v1.ReleaseResponse
+	10, // [10:15] is the sub-list for method output_type
+	5,  // [5:10] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_internal_proto_resource_map_v1_resource_map_proto_init() }
@@ -673,7 +760,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TryInitResourceRequest); i {
+			switch v := v.(*Caller); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -685,7 +772,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			}
 		}
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*TryInitResourceResponse); i {
+			switch v := v.(*TryInitResourceRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -697,7 +784,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			}
 		}
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CompleteInitResourceRequest); i {
+			switch v := v.(*TryInitResourceResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -709,7 +796,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			}
 		}
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CompleteInitResourceResponse); i {
+			switch v := v.(*CompleteInitResourceRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -721,7 +808,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			}
 		}
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FailInitResourceRequest); i {
+			switch v := v.(*CompleteInitResourceResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -733,7 +820,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			}
 		}
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FailInitResourceResponse); i {
+			switch v := v.(*FailInitResourceRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -745,7 +832,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			}
 		}
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*AcquireRequest); i {
+			switch v := v.(*FailInitResourceResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -757,7 +844,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			}
 		}
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*AcquireResponse); i {
+			switch v := v.(*AcquireRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -769,7 +856,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			}
 		}
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ReleaseRequest); i {
+			switch v := v.(*AcquireResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -781,6 +868,18 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			}
 		}
 		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ReleaseRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_internal_proto_resource_map_v1_resource_map_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ReleaseResponse); i {
 			case 0:
 				return &v.state
@@ -799,7 +898,7 @@ func file_internal_proto_resource_map_v1_resource_map_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_internal_proto_resource_map_v1_resource_map_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

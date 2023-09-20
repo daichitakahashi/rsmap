@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lestrrat-go/backoff/v2"
 	"github.com/lestrrat-go/option"
 	"go.etcd.io/bbolt"
@@ -22,7 +22,7 @@ import (
 type (
 	// Map is the controller for external resource usage.
 	Map struct {
-		clientID string
+		_callers logs.CallerContext
 		_cfg     config
 		_mu      sync.RWMutex
 		rm       resourceMap
@@ -31,9 +31,10 @@ type (
 
 	// Resource brings an ability of acquire/release lock for the dedicated resource.
 	Resource struct {
-		_m    *Map
-		_max  int64
-		_name string
+		_callers logs.CallerContext
+		_m       *Map
+		_max     int64
+		_name    string
 	}
 )
 
@@ -100,6 +101,10 @@ func logsDir(base string) (string, error) {
 //	p,  _ := exec.Command("go", "mod", "GOMOD").Output() // Get file path of "go.mod".
 //	m, _ := rsmap.New(filepath.Join(filepath.Dir(strings.TrimSpace(string(p))), ".rsmap"))
 func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
+	_, file, line, _ := runtime.Caller(1)
+	var callers logs.CallerContext
+	callers = callers.Append(file, line)
+
 	// Get directory for `logs.db` and `addr`.
 	dir, err := logsDir(rsmapDir)
 	if err != nil {
@@ -132,13 +137,13 @@ func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 	}
 
 	m := &Map{
-		clientID: uuid.NewString(),
+		_callers: callers,
 		_cfg:     cfg,
 		rm:       newClientSideMap(cfg),
 	}
 
 	// Start server launch process, and set release function.
-	m._stop = m.launchServer(dir, m.clientID)
+	m._stop = m.launchServer(dir, m._callers)
 
 	return m, nil
 }
@@ -163,7 +168,6 @@ func WithMaxParallelism(n int64) *ResourceOption {
 	}
 }
 
-// TODO: add error as a return value.
 type InitFunc func(ctx context.Context) error
 
 // WithInit specifies InitFunc for resource initialization.
@@ -182,6 +186,9 @@ func WithInit(init InitFunc) *ResourceOption {
 // Resource has a setting for max parallelism, you can specify the value by [WithMaxParallelism](default value is 5.)
 // And you want to perform an initialization of the resource, use [WithInit].
 func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption) (*Resource, error) {
+	_, file, line, _ := runtime.Caller(1)
+	callers := m._callers.Append(file, line)
+
 	var (
 		n             = int64(5)
 		init InitFunc = func(ctx context.Context) error {
@@ -202,7 +209,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 	m._mu.RLock()
 	rm := m.rm
 	m._mu.RUnlock()
-	try, err := rm.tryInit(ctx, name, m.clientID)
+	try, err := rm.tryInit(ctx, name, callers)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +224,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 
 				// If init succeeds, mark as complete.
 				if notPanicked && err == nil {
-					err = rm.completeInit(ctx, name, m.clientID)
+					err = rm.completeInit(ctx, name, callers)
 					return
 				}
 
@@ -225,7 +232,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 				// CAUTION: Do not recover panic to preserve stacktrace.
 				err = errors.Join(
 					err,
-					rm.failInit(ctx, name, m.clientID),
+					rm.failInit(ctx, name, callers),
 				)
 			}()
 
@@ -239,9 +246,10 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 	}
 
 	return &Resource{
-		_m:    m,
-		_max:  n,
-		_name: name,
+		_callers: callers,
+		_m:       m,
+		_max:     n,
+		_name:    name,
 	}, nil
 }
 
@@ -251,7 +259,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 //
 // To release lock, use [UnlockAny].
 func (r *Resource) RLock(ctx context.Context) error {
-	return r._m.rm.acquire(ctx, r._name, r._m.clientID, r._max, false)
+	return r._m.rm.acquire(ctx, r._name, r._callers, r._max, false)
 }
 
 // Lock acquires exclusive lock of the Resource.
@@ -260,21 +268,21 @@ func (r *Resource) RLock(ctx context.Context) error {
 //
 // To release lock, use [UnlockAny].
 func (r *Resource) Lock(ctx context.Context) error {
-	return r._m.rm.acquire(ctx, r._name, r._m.clientID, r._max, true)
+	return r._m.rm.acquire(ctx, r._name, r._callers, r._max, true)
 }
 
 // UnlockAny releases acquired shared/exclusive lock by the Resource.
 func (r *Resource) UnlockAny() error {
-	return r._m.rm.release(context.Background(), r._name, r._m.clientID)
+	return r._m.rm.release(context.Background(), r._name, r._callers)
 }
 
 // Core interface for control operations for both server and client side.
 type resourceMap interface {
-	tryInit(ctx context.Context, resourceName, operator string) (bool, error)
-	completeInit(ctx context.Context, resourceName, operator string) error
-	failInit(ctx context.Context, resourceName, operator string) error
-	acquire(ctx context.Context, resourceName, operator string, max int64, exclusive bool) error
-	release(ctx context.Context, resourceName, operator string) error
+	tryInit(ctx context.Context, resourceName string, operator logs.CallerContext) (bool, error)
+	completeInit(ctx context.Context, resourceName string, operator logs.CallerContext) error
+	failInit(ctx context.Context, resourceName string, operator logs.CallerContext) error
+	acquire(ctx context.Context, resourceName string, operator logs.CallerContext, max int64, exclusive bool) error
+	release(ctx context.Context, resourceName string, operator logs.CallerContext) error
 }
 
 type serverSideMap struct {
@@ -309,23 +317,23 @@ func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
 	}, nil
 }
 
-func (m *serverSideMap) tryInit(ctx context.Context, resourceName, operator string) (bool, error) {
+func (m *serverSideMap) tryInit(ctx context.Context, resourceName string, operator logs.CallerContext) (bool, error) {
 	return m._init.tryInit(ctx, resourceName, operator)
 }
 
-func (m *serverSideMap) completeInit(_ context.Context, resourceName, operator string) error {
+func (m *serverSideMap) completeInit(_ context.Context, resourceName string, operator logs.CallerContext) error {
 	return m._init.complete(resourceName, operator)
 }
 
-func (m *serverSideMap) failInit(_ context.Context, resourceName, operator string) error {
+func (m *serverSideMap) failInit(_ context.Context, resourceName string, operator logs.CallerContext) error {
 	return m._init.fail(resourceName, operator)
 }
 
-func (m *serverSideMap) acquire(ctx context.Context, resourceName string, operator string, max int64, exclusive bool) error {
+func (m *serverSideMap) acquire(ctx context.Context, resourceName string, operator logs.CallerContext, max int64, exclusive bool) error {
 	return m._acquire.acquire(ctx, resourceName, operator, max, exclusive)
 }
 
-func (m *serverSideMap) release(_ context.Context, resourceName, operator string) error {
+func (m *serverSideMap) release(_ context.Context, resourceName string, operator logs.CallerContext) error {
 	return m._acquire.release(resourceName, operator)
 }
 

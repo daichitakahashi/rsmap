@@ -39,6 +39,17 @@ func (c CallerContext) String() string {
 	return b.String()
 }
 
+func (c CallerContext) ShortString() string {
+	var b strings.Builder
+	for _, caller := range c {
+		if b.Len() > 0 {
+			b.WriteString("->")
+		}
+		b.WriteString(caller.Hash)
+	}
+	return b.String()
+}
+
 func newHash() string {
 	return hex.EncodeToString(
 		binary.BigEndian.AppendUint32([]byte{},
