@@ -28,10 +28,10 @@ type (
 	}
 
 	ServerLog struct {
-		Event     ServerEvent `json:"event"`
-		Addr      string      `json:"addr,omitempty"`
-		Operator  string      `json:"operator"`
-		Timestamp int64       `json:"ts,string"`
+		Event     ServerEvent   `json:"event"`
+		Addr      string        `json:"addr,omitempty"`
+		Context   CallerContext `json:"context"`
+		Timestamp int64         `json:"ts,string"`
 	}
 )
 
@@ -99,9 +99,9 @@ type (
 	}
 
 	InitLog struct {
-		Event     InitEvent `json:"event"`
-		Operator  string    `json:"operator"`
-		Timestamp int64     `json:"ts,string"`
+		Event     InitEvent     `json:"event"`
+		Context   CallerContext `json:"context"`
+		Timestamp int64         `json:"ts,string"`
 	}
 )
 
@@ -119,10 +119,10 @@ type (
 	}
 
 	AcquireLog struct {
-		Event     AcquireEvent `json:"event"`
-		N         int64        `json:"n,string,omitempty"`
-		Operator  string       `json:"operator"`
-		Timestamp int64        `json:"ts,string"`
+		Event     AcquireEvent  `json:"event"`
+		N         int64         `json:"n,string,omitempty"`
+		Context   CallerContext `json:"context"`
+		Timestamp int64         `json:"ts,string"`
 	}
 )
 
