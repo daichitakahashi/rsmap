@@ -16,6 +16,7 @@ import (
 	"github.com/lestrrat-go/option"
 	"go.etcd.io/bbolt"
 
+	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 	"github.com/daichitakahashi/rsmap/logs"
 )
 
@@ -293,11 +294,11 @@ type serverSideMap struct {
 // Create resourceMap for server side.
 // This map reads and updates bbolt.DB directly.
 func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
-	initRecordStore, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+	initRecordStore, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 	if err != nil {
 		return nil, err
 	}
-	acquireRecordStore, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
+	acquireRecordStore, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 	if err != nil {
 		return nil, err
 	}

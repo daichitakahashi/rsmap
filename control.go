@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 	"github.com/daichitakahashi/rsmap/logs"
 )
 
@@ -13,31 +14,31 @@ import (
 // * timeout for init and acquisition
 
 type initController struct {
-	_store     logs.ResourceRecordStore[logs.InitRecord]
+	_store     logs.ResourceRecordStore[logsv1.InitRecord]
 	_resources sync.Map
 }
 
-func loadInitController(store logs.ResourceRecordStore[logs.InitRecord]) (*initController, error) {
+func loadInitController(store logs.ResourceRecordStore[logsv1.InitRecord]) (*initController, error) {
 	c := &initController{
 		_store: store,
 	}
-	err := c._store.ForEach(func(name string, obj *logs.InitRecord) error {
+	err := c._store.ForEach(func(name string, obj *logsv1.InitRecord) error {
 		if len(obj.Logs) == 0 {
 			return nil // Impossible path.
 		}
 
 		// Get last init status and operator.
 		last := obj.Logs[len(obj.Logs)-1]
-		if last.Event == logs.InitEventFailed {
+		if last.Event == logsv1.InitEvent_INIT_EVENT_FAILED {
 			return nil // Former try is failed and anyone haven't started next try yet.
 		}
 
-		completed := last.Event == logs.InitEventCompleted
+		completed := last.Event == logsv1.InitEvent_INIT_EVENT_COMPLETED
 		ctl := newInitCtl(completed)
 		if !completed {
 			_ = ctl.tryInit(
 				context.Background(),
-				last.Context.String(),
+				logs.CallerContext(last.Context).String(),
 				func(try bool) error { return nil },
 			)
 		}
@@ -69,9 +70,9 @@ func (c *initController) tryInit(ctx context.Context, resourceName string, opera
 		}
 
 		// Update data on key value store.
-		return c._store.Put(resourceName, func(r *logs.InitRecord, _ bool) {
-			r.Logs = append(r.Logs, logs.InitLog{
-				Event:     logs.InitEventStarted,
+		return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
+			r.Logs = append(r.Logs, &logsv1.InitLog{
+				Event:     logsv1.InitEvent_INIT_EVENT_STARTED,
 				Context:   operator,
 				Timestamp: time.Now().UnixNano(),
 			})
@@ -92,9 +93,9 @@ func (c *initController) complete(resourceName string, operator logs.CallerConte
 	ctl := v.(*initCtl)
 
 	return ctl.complete(operator.String(), func() error {
-		return c._store.Put(resourceName, func(r *logs.InitRecord, _ bool) {
-			r.Logs = append(r.Logs, logs.InitLog{
-				Event:     logs.InitEventCompleted,
+		return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
+			r.Logs = append(r.Logs, &logsv1.InitLog{
+				Event:     logsv1.InitEvent_INIT_EVENT_COMPLETED,
 				Context:   operator,
 				Timestamp: time.Now().UnixNano(),
 			})
@@ -110,9 +111,9 @@ func (c *initController) fail(resourceName string, operator logs.CallerContext) 
 	ctl := v.(*initCtl)
 
 	return ctl.fail(operator.String(), func() error {
-		return c._store.Put(resourceName, func(r *logs.InitRecord, _ bool) {
-			r.Logs = append(r.Logs, logs.InitLog{
-				Event:     logs.InitEventFailed,
+		return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
+			r.Logs = append(r.Logs, &logsv1.InitLog{
+				Event:     logsv1.InitEvent_INIT_EVENT_FAILED,
 				Context:   operator,
 				Timestamp: time.Now().UnixNano(),
 			})
@@ -122,29 +123,29 @@ func (c *initController) fail(resourceName string, operator logs.CallerContext) 
 
 // Control acquisition status and persistence.
 type acquireController struct {
-	_kv        logs.ResourceRecordStore[logs.AcquireRecord]
+	_kv        logs.ResourceRecordStore[logsv1.AcquisitionRecord]
 	_resources sync.Map
 }
 
-func loadAcquireController(store logs.ResourceRecordStore[logs.AcquireRecord]) (*acquireController, error) {
+func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionRecord]) (*acquireController, error) {
 	c := &acquireController{
 		_kv: store,
 	}
 
-	err := store.ForEach(func(name string, obj *logs.AcquireRecord) error {
+	err := store.ForEach(func(name string, obj *logsv1.AcquisitionRecord) error {
 		acquired := map[string]int64{}
 		// Replay stored acquisitions of the resource.
 		for _, log := range obj.Logs {
 			switch log.Event {
-			case logs.AcquireEventAcquired:
+			case logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED:
 				// Consecutive acquisition is not recorded.
 				// So, we can skip the check of existing value.
 				//
 				// See: `(*acquireCtl).acquire()`
-				acquired[log.Context.String()] = log.N
-			case logs.AcquireEventReleased:
+				acquired[logs.CallerContext(log.Context).String()] = log.N
+			case logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED:
 				// We assume that acquisition log is already processed.
-				delete(acquired, log.Context.String())
+				delete(acquired, logs.CallerContext(log.Context).String())
 			}
 		}
 		// Set replayed acquireCtl.
@@ -173,13 +174,13 @@ func (c *acquireController) acquire(ctx context.Context, resourceName string, op
 		return nil
 	}
 
-	return c._kv.Put(resourceName, func(r *logs.AcquireRecord, update bool) {
+	return c._kv.Put(resourceName, func(r *logsv1.AcquisitionRecord, update bool) {
 		// Initial acquisition.
 		if !update {
 			r.Max = max
 		}
-		r.Logs = append(r.Logs, logs.AcquireLog{
-			Event:     logs.AcquireEventAcquired,
+		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
+			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 			N:         n,
 			Context:   operator,
 			Timestamp: time.Now().UnixNano(),
@@ -199,9 +200,9 @@ func (c *acquireController) release(resourceName string, operator logs.CallerCon
 		return nil
 	}
 
-	return c._kv.Put(resourceName, func(r *logs.AcquireRecord, _ bool) {
-		r.Logs = append(r.Logs, logs.AcquireLog{
-			Event:     logs.AcquireEventReleased,
+	return c._kv.Put(resourceName, func(r *logsv1.AcquisitionRecord, _ bool) {
+		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
+			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 			N:         0,
 			Context:   operator,
 			Timestamp: time.Now().UnixNano(),

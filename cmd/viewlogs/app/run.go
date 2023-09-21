@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/pflag"
 	"go.etcd.io/bbolt"
 
+	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 	"github.com/daichitakahashi/rsmap/logs"
 )
 
@@ -104,20 +105,20 @@ func run(filename, operation, resource string) error {
 
 		for _, l := range store.ServerRecord().Logs {
 			var data string
-			if l.Event == logs.ServerEventLaunched {
+			if l.Event == logsv1.ServerEvent_SERVER_EVENT_LAUNCHED {
 				data = fmt.Sprintf("addr=%s", l.Addr)
 			}
 			insert(row{
 				ts:        l.Timestamp,
-				operation: "server:" + string(l.Event),
-				context:   l.Context.String(),
+				operation: "server:" + l.Event.String(),
+				context:   logs.CallerContext(l.Context).String(),
 				data:      data,
 			})
 		}
 	}
 
 	if init {
-		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		if err != nil {
 			return err
 		}
@@ -129,15 +130,15 @@ func run(filename, operation, resource string) error {
 		for _, l := range r.Logs {
 			insert(row{
 				ts:        l.Timestamp,
-				operation: "init:" + string(l.Event),
-				context:   l.Context.String(),
+				operation: "init:" + l.Event.String(),
+				context:   logs.CallerContext(l.Context).String(),
 				data:      "",
 			})
 		}
 	}
 
 	if acquire {
-		store, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		if err != nil {
 			return err
 		}
@@ -151,13 +152,13 @@ func run(filename, operation, resource string) error {
 			if i == 0 {
 				data = fmt.Sprintf("Max=%d,", r.Max)
 			}
-			if l.Event == logs.AcquireEventAcquired {
+			if l.Event == logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED {
 				data = fmt.Sprintf("%sN=%d", data, l.N)
 			}
 			insert(row{
 				ts:        l.Timestamp,
-				operation: string(l.Event),
-				context:   l.Context.String(),
+				operation: l.Event.String(),
+				context:   logs.CallerContext(l.Context).String(),
 				data:      data,
 			})
 		}

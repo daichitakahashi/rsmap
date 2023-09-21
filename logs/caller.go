@@ -7,20 +7,16 @@ import (
 	"hash/crc32"
 	"strings"
 	"time"
+
+	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 )
 
-type Caller struct {
-	File string `json:"file"`
-	Line int    `json:"line"`
-	Hash string `json:"hash"`
-}
-
-type CallerContext []Caller
+type CallerContext []*logsv1.Caller
 
 func (c CallerContext) Append(file string, line int) CallerContext {
-	return append(c, Caller{
+	return append(c, &logsv1.Caller{
 		File: file,
-		Line: line,
+		Line: int64(line),
 		Hash: newHash(),
 	})
 }
