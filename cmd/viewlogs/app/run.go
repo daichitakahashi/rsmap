@@ -16,8 +16,9 @@ import (
 
 func Run() {
 	var (
-		operation = pflag.StringP("operation", "o", "", "")
-		resource  = pflag.StringP("resource", "r", "", "")
+		operation    = pflag.StringP("operation", "o", "", "")
+		resource     = pflag.StringP("resource", "r", "", "")
+		shortContext = pflag.BoolP("short", "s", false, "")
 	)
 	pflag.Parse()
 
@@ -26,12 +27,12 @@ func Run() {
 		log.Fatal("logs.db file must be specified")
 	}
 
-	if err := run(filename, *operation, *resource); err != nil {
+	if err := run(filename, *operation, *resource, *shortContext); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func run(filename, operation, resource string) error {
+func run(filename, operation, resource string, shortContext bool) error {
 	_, err := os.Stat(filename)
 	if err != nil {
 		return err
@@ -65,7 +66,7 @@ func run(filename, operation, resource string) error {
 		return errors.New("resource id must be specified")
 	}
 
-	table := newTablePrinter()
+	table := newTablePrinter(shortContext)
 
 	if server {
 		store, err := logs.NewInfoStore(db)

@@ -17,16 +17,20 @@ type (
 		ts        int64 // timestamp
 		operation string
 		data      string
-		context   string
+		context   logs.CallerContext
 	}
 
 	tablePrinter struct {
+		shortContext bool
+
 		rows []row
 	}
 )
 
-func newTablePrinter() *tablePrinter {
+func newTablePrinter(shortContext bool) *tablePrinter {
 	return &tablePrinter{
+		shortContext: shortContext,
+
 		rows: []row{},
 	}
 }
@@ -62,7 +66,7 @@ func (p *tablePrinter) insertServerLogs(sl []*logsv1.ServerLog) {
 			ts:        l.Timestamp,
 			operation: formatServerOperation(l.Event),
 			data:      data,
-			context:   logs.CallerContext(l.Context).String(),
+			context:   logs.CallerContext(l.Context),
 		})
 	}
 }
@@ -74,7 +78,7 @@ func (p *tablePrinter) insertInitLogs(resource string, il []*logsv1.InitLog) {
 		p.insert(row{
 			ts:        l.Timestamp,
 			operation: formatInitOperation(l.Event),
-			context:   logs.CallerContext(l.Context).String(),
+			context:   logs.CallerContext(l.Context),
 		})
 	}
 }
@@ -93,7 +97,7 @@ func (p *tablePrinter) insertAcquisitionLogs(resource string, r *logsv1.Acquisit
 		p.insert(row{
 			ts:        l.Timestamp,
 			operation: formatAcquisitionOperation(l.Event),
-			context:   logs.CallerContext(l.Context).String(),
+			context:   logs.CallerContext(l.Context),
 			data:      data,
 		})
 	}
@@ -111,7 +115,13 @@ func (p *tablePrinter) print() {
 	var last time.Time
 	for _, r := range p.rows {
 		timestamp, elapsed := formatTime(r.ts, &last)
-		tbl.AddRow(timestamp, elapsed, r.operation, r.data, r.context)
+		var ctx string
+		if p.shortContext {
+			ctx = r.context.ShortString()
+		} else {
+			ctx = r.context.String()
+		}
+		tbl.AddRow(timestamp, elapsed, r.operation, r.data, ctx)
 	}
 	tbl.Print()
 }
