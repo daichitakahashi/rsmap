@@ -5,8 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.etcd.io/bbolt"
 	"gotest.tools/v3/assert"
+
+	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 )
 
 func mustBeCalledOnce[T any](t *testing.T, fn func(t *testing.T, v T)) func(t *testing.T, v T) {
@@ -29,6 +32,16 @@ func mustBeCalledOnce[T any](t *testing.T, fn func(t *testing.T, v T)) func(t *t
 	}
 }
 
+var ignoreProtoUnexported = cmpopts.IgnoreUnexported(
+	logsv1.Caller{},
+	logsv1.ServerRecord{},
+	logsv1.ServerLog{},
+	logsv1.InitRecord{},
+	logsv1.InitLog{},
+	logsv1.AcquisitionRecord{},
+	logsv1.AcquisitionLog{},
+)
+
 func TestInfoStore(t *testing.T) {
 	t.Parallel()
 
@@ -44,10 +57,10 @@ func TestInfoStore(t *testing.T) {
 		assert.NilError(t, err)
 
 		// Store server logs.
-		assert.NilError(t, store.PutServerLog(ServerLog{
-			Event: ServerEventLaunched,
+		assert.NilError(t, store.PutServerLog(&logsv1.ServerLog{
+			Event: logsv1.ServerEvent_SERVER_EVENT_LAUNCHED,
 			Addr:  "http://localhost:8080",
-			Context: CallerContext{
+			Context: []*logsv1.Caller{
 				{
 					File: "alice.go",
 					Line: 10,
@@ -56,9 +69,9 @@ func TestInfoStore(t *testing.T) {
 			},
 			Timestamp: 1694765593803865000,
 		}))
-		assert.NilError(t, store.PutServerLog(ServerLog{
-			Event: ServerEventStopped,
-			Context: CallerContext{
+		assert.NilError(t, store.PutServerLog(&logsv1.ServerLog{
+			Event: logsv1.ServerEvent_SERVER_EVENT_STOPPED,
+			Context: []*logsv1.Caller{
 				{
 					File: "bob.go",
 					Line: 124,
@@ -69,12 +82,12 @@ func TestInfoStore(t *testing.T) {
 		}))
 
 		// Get server logs(actually, not stored).
-		assert.DeepEqual(t, *store.ServerRecord(), ServerRecord{
-			Logs: []ServerLog{
+		assert.DeepEqual(t, store.ServerRecord(), &logsv1.ServerRecord{
+			Logs: []*logsv1.ServerLog{
 				{
-					Event: ServerEventLaunched,
+					Event: logsv1.ServerEvent_SERVER_EVENT_LAUNCHED,
 					Addr:  "http://localhost:8080",
-					Context: CallerContext{
+					Context: []*logsv1.Caller{
 						{
 							File: "alice.go",
 							Line: 10,
@@ -84,8 +97,8 @@ func TestInfoStore(t *testing.T) {
 					Timestamp: 1694765593803865000,
 				},
 				{
-					Event: ServerEventStopped,
-					Context: CallerContext{
+					Event: logsv1.ServerEvent_SERVER_EVENT_STOPPED,
+					Context: []*logsv1.Caller{
 						{
 							File: "bob.go",
 							Line: 124,
@@ -95,7 +108,7 @@ func TestInfoStore(t *testing.T) {
 					Timestamp: 1694765603344265000,
 				},
 			},
-		})
+		}, ignoreProtoUnexported)
 	}()
 
 	db, err := bbolt.Open(filepath.Join(dir, "records.db"), 0644, nil)
@@ -108,12 +121,12 @@ func TestInfoStore(t *testing.T) {
 	assert.NilError(t, err)
 
 	// Get stored server logs.
-	assert.DeepEqual(t, *store.ServerRecord(), ServerRecord{
-		Logs: []ServerLog{
+	assert.DeepEqual(t, store.ServerRecord(), &logsv1.ServerRecord{
+		Logs: []*logsv1.ServerLog{
 			{
-				Event: ServerEventLaunched,
+				Event: logsv1.ServerEvent_SERVER_EVENT_LAUNCHED,
 				Addr:  "http://localhost:8080",
-				Context: CallerContext{
+				Context: []*logsv1.Caller{
 					{
 						File: "alice.go",
 						Line: 10,
@@ -123,8 +136,8 @@ func TestInfoStore(t *testing.T) {
 				Timestamp: 1694765593803865000,
 			},
 			{
-				Event: ServerEventStopped,
-				Context: CallerContext{
+				Event: logsv1.ServerEvent_SERVER_EVENT_STOPPED,
+				Context: []*logsv1.Caller{
 					{
 						File: "bob.go",
 						Line: 124,
@@ -134,7 +147,7 @@ func TestInfoStore(t *testing.T) {
 				Timestamp: 1694765603344265000,
 			},
 		},
-	})
+	}, ignoreProtoUnexported)
 }
 
 func TestResourceRecordStore(t *testing.T) {
@@ -147,7 +160,7 @@ func TestResourceRecordStore(t *testing.T) {
 		_ = db.Close()
 	})
 
-	store, err := NewResourceRecordStore[InitRecord](db)
+	store, err := NewResourceRecordStore[logsv1.InitRecord](db)
 	assert.NilError(t, err)
 
 	// Record is not stored yet.
@@ -157,13 +170,13 @@ func TestResourceRecordStore(t *testing.T) {
 
 	// Store record.
 	assert.NilError(t,
-		store.Put("treasure", func(r *InitRecord, update bool) {
+		store.Put("treasure", func(r *logsv1.InitRecord, update bool) {
 			// This is a new record.
 			assert.Assert(t, !update)
 
-			r.Logs = append(r.Logs, InitLog{
-				Event: InitEventStarted,
-				Context: CallerContext{
+			r.Logs = append(r.Logs, &logsv1.InitLog{
+				Event: logsv1.InitEvent_INIT_EVENT_STARTED,
+				Context: []*logsv1.Caller{
 					{
 						File: "alice.go",
 						Line: 77,
@@ -183,11 +196,11 @@ func TestResourceRecordStore(t *testing.T) {
 	// Get stored record.
 	got, err = store.Get("treasure")
 	assert.NilError(t, err)
-	assert.DeepEqual(t, *got, InitRecord{
-		Logs: []InitLog{
+	assert.DeepEqual(t, got, &logsv1.InitRecord{
+		Logs: []*logsv1.InitLog{
 			{
-				Event: InitEventStarted,
-				Context: CallerContext{
+				Event: logsv1.InitEvent_INIT_EVENT_STARTED,
+				Context: []*logsv1.Caller{
 					{
 						File: "alice.go",
 						Line: 77,
@@ -202,15 +215,15 @@ func TestResourceRecordStore(t *testing.T) {
 				Timestamp: math.MaxInt64, // Check serialization for large number.
 			},
 		},
-	})
+	}, ignoreProtoUnexported)
 
 	// Store another record.
-	assert.NilError(t, store.Put("precious", func(r *InitRecord, update bool) {
+	assert.NilError(t, store.Put("precious", func(r *logsv1.InitRecord, update bool) {
 		assert.Assert(t, !update)
 
-		r.Logs = append(r.Logs, InitLog{
-			Event: InitEventStarted,
-			Context: CallerContext{
+		r.Logs = append(r.Logs, &logsv1.InitLog{
+			Event: logsv1.InitEvent_INIT_EVENT_STARTED,
+			Context: []*logsv1.Caller{
 				{
 					File: "bob.go",
 					Line: 12,
@@ -225,13 +238,13 @@ func TestResourceRecordStore(t *testing.T) {
 			Timestamp: 1694765621790751000,
 		})
 	}))
-	assert.NilError(t, store.Put("precious", func(r *InitRecord, update bool) {
+	assert.NilError(t, store.Put("precious", func(r *logsv1.InitRecord, update bool) {
 		// Update record.
 		assert.Assert(t, update)
 
-		r.Logs = append(r.Logs, InitLog{
-			Event: InitEventCompleted,
-			Context: CallerContext{
+		r.Logs = append(r.Logs, &logsv1.InitLog{
+			Event: logsv1.InitEvent_INIT_EVENT_COMPLETED,
+			Context: []*logsv1.Caller{
 				{
 					File: "bob.go",
 					Line: 12,
@@ -248,12 +261,12 @@ func TestResourceRecordStore(t *testing.T) {
 	}))
 
 	// Iterate records using forEach.
-	checkTreasure := mustBeCalledOnce(t, func(t *testing.T, got *InitRecord) {
-		assert.DeepEqual(t, *got, InitRecord{
-			Logs: []InitLog{
+	checkTreasure := mustBeCalledOnce(t, func(t *testing.T, got *logsv1.InitRecord) {
+		assert.DeepEqual(t, got, &logsv1.InitRecord{
+			Logs: []*logsv1.InitLog{
 				{
-					Event: InitEventStarted,
-					Context: CallerContext{
+					Event: logsv1.InitEvent_INIT_EVENT_STARTED,
+					Context: []*logsv1.Caller{
 						{
 							File: "alice.go",
 							Line: 77,
@@ -268,14 +281,14 @@ func TestResourceRecordStore(t *testing.T) {
 					Timestamp: math.MaxInt64,
 				},
 			},
-		})
+		}, ignoreProtoUnexported)
 	})
-	checkPrecious := mustBeCalledOnce(t, func(t *testing.T, got *InitRecord) {
-		assert.DeepEqual(t, *got, InitRecord{
-			Logs: []InitLog{
+	checkPrecious := mustBeCalledOnce(t, func(t *testing.T, got *logsv1.InitRecord) {
+		assert.DeepEqual(t, got, &logsv1.InitRecord{
+			Logs: []*logsv1.InitLog{
 				{
-					Event: InitEventStarted,
-					Context: CallerContext{
+					Event: logsv1.InitEvent_INIT_EVENT_STARTED,
+					Context: []*logsv1.Caller{
 						{
 							File: "bob.go",
 							Line: 12,
@@ -289,8 +302,8 @@ func TestResourceRecordStore(t *testing.T) {
 					},
 					Timestamp: 1694765621790751000,
 				}, {
-					Event: InitEventCompleted,
-					Context: CallerContext{
+					Event: logsv1.InitEvent_INIT_EVENT_COMPLETED,
+					Context: []*logsv1.Caller{
 						{
 							File: "bob.go",
 							Line: 12,
@@ -305,10 +318,10 @@ func TestResourceRecordStore(t *testing.T) {
 					Timestamp: 1694765637968901000,
 				},
 			},
-		})
+		}, ignoreProtoUnexported)
 	})
 	assert.NilError(t,
-		store.ForEach(func(name string, obj *InitRecord) error {
+		store.ForEach(func(name string, obj *logsv1.InitRecord) error {
 			switch name {
 			case "treasure":
 				checkTreasure(t, obj)

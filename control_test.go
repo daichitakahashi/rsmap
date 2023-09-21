@@ -7,11 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"go.etcd.io/bbolt"
 	"golang.org/x/sync/errgroup"
 	"gotest.tools/v3/assert"
 
+	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 	"github.com/daichitakahashi/rsmap/logs"
 )
 
@@ -62,6 +64,21 @@ var (
 	}
 )
 
+var protoCmpOpts = []cmp.Option{
+	cmpopts.IgnoreUnexported(
+		logsv1.Caller{},
+		logsv1.ServerRecord{},
+		logsv1.ServerLog{},
+		logsv1.InitRecord{},
+		logsv1.InitLog{},
+		logsv1.AcquisitionRecord{},
+		logsv1.AcquisitionLog{},
+	),
+	cmpopts.IgnoreFields(logsv1.ServerLog{}, "Timestamp"),
+	cmpopts.IgnoreFields(logsv1.InitLog{}, "Timestamp"),
+	cmpopts.IgnoreFields(logsv1.AcquisitionLog{}, "Timestamp"),
+}
+
 func TestInitController(t *testing.T) {
 	t.Parallel()
 
@@ -74,7 +91,7 @@ func TestInitController(t *testing.T) {
 			_ = db.Close()
 		})
 
-		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
 		ctl, err := loadInitController(store)
@@ -123,17 +140,17 @@ func TestInitController(t *testing.T) {
 		// Check stored logs.
 		r, err := store.Get("treasure")
 		assert.NilError(t, err)
-		assert.DeepEqual(t, *r, logs.InitRecord{
-			Logs: []logs.InitLog{
+		assert.DeepEqual(t, r, &logsv1.InitRecord{
+			Logs: []*logsv1.InitLog{
 				{
-					Event:   logs.InitEventStarted,
+					Event:   logsv1.InitEvent_INIT_EVENT_STARTED,
 					Context: callerAlice,
 				}, {
-					Event:   logs.InitEventCompleted,
+					Event:   logsv1.InitEvent_INIT_EVENT_COMPLETED,
 					Context: callerAlice,
 				},
 			},
-		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
+		}, protoCmpOpts...)
 	})
 
 	t.Run("Consecutive try by same operator should be succeeded", func(t *testing.T) {
@@ -145,7 +162,7 @@ func TestInitController(t *testing.T) {
 			_ = db.Close()
 		})
 
-		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
 		ctl, err := loadInitController(store)
@@ -164,14 +181,14 @@ func TestInitController(t *testing.T) {
 		// Check stored logs.
 		r, err := store.Get("treasure")
 		assert.NilError(t, err)
-		assert.DeepEqual(t, *r, logs.InitRecord{
-			Logs: []logs.InitLog{
+		assert.DeepEqual(t, r, &logsv1.InitRecord{
+			Logs: []*logsv1.InitLog{
 				{
-					Event:   logs.InitEventStarted,
+					Event:   logsv1.InitEvent_INIT_EVENT_STARTED,
 					Context: callerAlice,
 				},
 			},
-		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
+		}, protoCmpOpts...)
 	})
 
 	t.Run("Retry is allowed after the failure of first init", func(t *testing.T) {
@@ -183,7 +200,7 @@ func TestInitController(t *testing.T) {
 			_ = db.Close()
 		})
 
-		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
 		ctl, err := loadInitController(store)
@@ -244,14 +261,14 @@ func TestInitController(t *testing.T) {
 			_ = db.Close()
 		})
 
-		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
 		// Setup situation that init has already started.
 		assert.NilError(t,
-			store.Put("treasure", func(r *logs.InitRecord, _ bool) {
-				r.Logs = append(r.Logs, logs.InitLog{
-					Event:     logs.InitEventStarted,
+			store.Put("treasure", func(r *logsv1.InitRecord, _ bool) {
+				r.Logs = append(r.Logs, &logsv1.InitLog{
+					Event:     logsv1.InitEvent_INIT_EVENT_STARTED,
 					Context:   callerAlice,
 					Timestamp: time.Now().UnixNano(),
 				})
@@ -279,17 +296,17 @@ func TestInitController(t *testing.T) {
 		// Check stored logs.
 		r, err := store.Get("treasure")
 		assert.NilError(t, err)
-		assert.DeepEqual(t, *r, logs.InitRecord{
-			Logs: []logs.InitLog{
+		assert.DeepEqual(t, r, &logsv1.InitRecord{
+			Logs: []*logsv1.InitLog{
 				{
-					Event:   logs.InitEventStarted,
+					Event:   logsv1.InitEvent_INIT_EVENT_STARTED,
 					Context: callerAlice,
 				}, {
-					Event:   logs.InitEventCompleted,
+					Event:   logsv1.InitEvent_INIT_EVENT_COMPLETED,
 					Context: callerAlice,
 				},
 			},
-		}, cmpopts.IgnoreFields(logs.InitLog{}, "Timestamp"))
+		}, protoCmpOpts...)
 	})
 
 	t.Run("Replay the status that init is completed", func(t *testing.T) {
@@ -301,19 +318,19 @@ func TestInitController(t *testing.T) {
 			_ = db.Close()
 		})
 
-		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
 		// Setup situation that init has already completed.
 		assert.NilError(t,
-			store.Put("treasure", func(r *logs.InitRecord, _ bool) {
-				r.Logs = append(r.Logs, []logs.InitLog{
+			store.Put("treasure", func(r *logsv1.InitRecord, _ bool) {
+				r.Logs = append(r.Logs, []*logsv1.InitLog{
 					{
-						Event:     logs.InitEventCompleted,
+						Event:     logsv1.InitEvent_INIT_EVENT_STARTED,
 						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}, {
-						Event:     logs.InitEventCompleted,
+						Event:     logsv1.InitEvent_INIT_EVENT_COMPLETED,
 						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}}...)
@@ -338,7 +355,7 @@ func TestInitController(t *testing.T) {
 			_ = db.Close()
 		})
 
-		store, err := logs.NewResourceRecordStore[logs.InitRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
 		ctl, err := loadInitController(store)
@@ -372,7 +389,7 @@ func TestAcquireController(t *testing.T) {
 			_ = db.Close()
 		})
 
-		store, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 
 		ctl, err := loadAcquireController(store)
@@ -413,33 +430,33 @@ func TestAcquireController(t *testing.T) {
 		// Check stored logs.
 		r, err := store.Get("treasure")
 		assert.NilError(t, err)
-		assert.DeepEqual(t, *r, logs.AcquireRecord{
+		assert.DeepEqual(t, r, &logsv1.AcquisitionRecord{
 			Max: 100,
-			Logs: []logs.AcquireLog{
+			Logs: []*logsv1.AcquisitionLog{
 				{
-					Event:   logs.AcquireEventAcquired,
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 					N:       1,
 					Context: callerAlice,
 				}, {
-					Event:   logs.AcquireEventAcquired,
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 					N:       1,
 					Context: callerBob,
 				}, {
-					Event:   logs.AcquireEventReleased,
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 					Context: callerAlice,
 				}, {
-					Event:   logs.AcquireEventReleased,
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 					Context: callerBob,
 				}, {
-					Event:   logs.AcquireEventAcquired,
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 					N:       100,
 					Context: callerCharlie,
 				}, {
-					Event:   logs.AcquireEventReleased,
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 					Context: callerCharlie,
 				},
 			},
-		}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
+		}, protoCmpOpts...)
 	})
 
 	t.Run("Consecutive acquire and release are succeeds but not recorded logs", func(t *testing.T) {
@@ -451,7 +468,7 @@ func TestAcquireController(t *testing.T) {
 			_ = db.Close()
 		})
 
-		store, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 
 		ctl, err := loadAcquireController(store)
@@ -478,20 +495,20 @@ func TestAcquireController(t *testing.T) {
 		// Check stored logs.
 		r, err := store.Get("treasure")
 		assert.NilError(t, err)
-		assert.DeepEqual(t, *r, logs.AcquireRecord{
+		assert.DeepEqual(t, r, &logsv1.AcquisitionRecord{
 			Max: 100,
-			Logs: []logs.AcquireLog{
+			Logs: []*logsv1.AcquisitionLog{
 				{
-					Event:   logs.AcquireEventAcquired,
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 					N:       100,
 					Context: callerAlice,
 				}, {
-					Event:   logs.AcquireEventReleased,
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 					N:       0,
 					Context: callerAlice,
 				},
 			},
-		}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
+		}, protoCmpOpts...)
 	})
 
 	t.Run("Replay acquisition status correctly", func(t *testing.T) {
@@ -503,25 +520,25 @@ func TestAcquireController(t *testing.T) {
 			_ = db.Close()
 		})
 
-		store, err := logs.NewResourceRecordStore[logs.AcquireRecord](db)
+		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 
 		// Set up acquisition status.
 		assert.NilError(t,
-			store.Put("treasure", func(r *logs.AcquireRecord, _ bool) {
+			store.Put("treasure", func(r *logsv1.AcquisitionRecord, _ bool) {
 				r.Max = 10
-				r.Logs = append(r.Logs, []logs.AcquireLog{
+				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
 					{
-						Event:     logs.AcquireEventAcquired,
+						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:         10,
 						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}, {
-						Event:     logs.AcquireEventReleased,
+						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}, {
-						Event:     logs.AcquireEventAcquired,
+						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:         1,
 						Context:   callerAlice,
 						Timestamp: 0,
@@ -530,11 +547,11 @@ func TestAcquireController(t *testing.T) {
 			}),
 		)
 		assert.NilError(t,
-			store.Put("precious", func(r *logs.AcquireRecord, _ bool) {
+			store.Put("precious", func(r *logsv1.AcquisitionRecord, _ bool) {
 				r.Max = 200
-				r.Logs = append(r.Logs, []logs.AcquireLog{
+				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
 					{
-						Event:     logs.AcquireEventAcquired,
+						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:         200,
 						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
@@ -569,27 +586,27 @@ func TestAcquireController(t *testing.T) {
 			// Check stored logs.
 			r, err := store.Get("treasure")
 			assert.NilError(t, err)
-			assert.DeepEqual(t, *r, logs.AcquireRecord{
+			assert.DeepEqual(t, r, &logsv1.AcquisitionRecord{
 				Max: 10,
-				Logs: []logs.AcquireLog{
+				Logs: []*logsv1.AcquisitionLog{
 					{
-						Event:   logs.AcquireEventAcquired,
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       10,
 						Context: callerAlice,
 					}, {
-						Event:   logs.AcquireEventReleased,
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 						Context: callerAlice,
 					}, {
-						Event:   logs.AcquireEventAcquired,
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       1,
 						Context: callerAlice,
 					}, {
-						Event:   logs.AcquireEventAcquired,
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       1,
 						Context: callerBob,
 					},
 				},
-			}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
+			}, protoCmpOpts...)
 		}
 
 		{
@@ -616,23 +633,23 @@ func TestAcquireController(t *testing.T) {
 			// Check stored logs.
 			r, err := store.Get("precious")
 			assert.NilError(t, err)
-			assert.DeepEqual(t, *r, logs.AcquireRecord{
+			assert.DeepEqual(t, r, &logsv1.AcquisitionRecord{
 				Max: 200,
-				Logs: []logs.AcquireLog{
+				Logs: []*logsv1.AcquisitionLog{
 					{
-						Event:   logs.AcquireEventAcquired,
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       200,
 						Context: callerAlice,
 					}, {
-						Event:   logs.AcquireEventReleased,
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 						Context: callerAlice,
 					}, {
-						Event:   logs.AcquireEventAcquired,
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       1,
 						Context: callerBob,
 					},
 				},
-			}, cmpopts.IgnoreFields(logs.AcquireLog{}, "Timestamp"))
+			}, protoCmpOpts...)
 		}
 	})
 }
