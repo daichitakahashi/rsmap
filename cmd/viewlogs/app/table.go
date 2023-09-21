@@ -1,12 +1,17 @@
 package app
 
 import (
+	"bytes"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"time"
 
 	"github.com/fatih/color"
 	"github.com/rodaine/table"
+	"golang.org/x/mod/modfile"
 
 	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 	"github.com/daichitakahashi/rsmap/logs"
@@ -103,7 +108,12 @@ func (p *tablePrinter) insertAcquisitionLogs(resource string, r *logsv1.Acquisit
 	}
 }
 
-func (p *tablePrinter) print() {
+func (p *tablePrinter) print() error {
+	pathShortener, err := newPathShortener()
+	if err != nil {
+		return err
+	}
+
 	tbl := table.New("Time", "Elapsed", "Operation", "Data", "Context(Map->Resource)").
 		WithHeaderFormatter(
 			color.New(color.FgGreen, color.Underline).SprintfFunc(),
@@ -115,6 +125,13 @@ func (p *tablePrinter) print() {
 	var last time.Time
 	for _, r := range p.rows {
 		timestamp, elapsed := formatTime(r.ts, &last)
+
+		// Shorten context filepaths.
+		for _, c := range r.context {
+			if err := pathShortener.shorten(c); err != nil {
+				return err
+			}
+		}
 		var ctx string
 		if p.shortContext {
 			ctx = r.context.ShortString()
@@ -123,7 +140,9 @@ func (p *tablePrinter) print() {
 		}
 		tbl.AddRow(timestamp, elapsed, r.operation, r.data, ctx)
 	}
+
 	tbl.Print()
+	return nil
 }
 
 func formatServerOperation(e logsv1.ServerEvent) string {
@@ -175,4 +194,62 @@ func formatTime(ts int64, last *time.Time) (string, string) {
 		return s, "+" + diff.String()
 	}
 	return s, diff.String()
+}
+
+type pathShortener struct {
+	wd      string
+	modName string
+
+	isModulePath struct { // go test -trimpath
+		checked bool
+		value   bool
+	}
+}
+
+func newPathShortener() (*pathShortener, error) {
+	// Get current directory for context resolution.
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	// Get module name of "wd" for context resolution.
+	out, err := exec.Command("go", "env", "GOMOD").Output()
+	if err != nil {
+		return nil, err
+	}
+	path := string(bytes.TrimSpace(out))
+	if path == "" || path == os.DevNull {
+		return &pathShortener{
+			wd: wd,
+		}, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	mod, err := modfile.Parse("go.mod", data, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pathShortener{
+		wd:      wd,
+		modName: mod.Module.Mod.Path,
+	}, nil
+}
+
+func (s *pathShortener) shorten(c *logsv1.Caller) error {
+	if !s.isModulePath.checked {
+		s.isModulePath.value = !filepath.IsAbs(c.File)
+		s.isModulePath.checked = true
+	}
+
+	var err error
+	if s.isModulePath.value {
+		c.File, err = filepath.Rel(s.modName, c.File)
+	} else {
+		c.File, err = filepath.Rel(s.wd, c.File)
+	}
+	return err
 }

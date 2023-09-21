@@ -101,7 +101,5 @@ func run(filename, operation, resource string, shortContext bool) error {
 	}
 
 	fmt.Printf("Resource identifier: %q\n\n", resource)
-	table.print()
-
-	return nil
+	return table.print()
 }
