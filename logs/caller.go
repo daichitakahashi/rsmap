@@ -4,9 +4,8 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"hash/crc32"
+	"math/rand"
 	"strings"
-	"time"
 
 	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 )
@@ -48,13 +47,6 @@ func (c CallerContext) ShortString() string {
 
 func newHash() string {
 	return hex.EncodeToString(
-		binary.BigEndian.AppendUint32([]byte{},
-			crc32.ChecksumIEEE(
-				time.Now().AppendFormat(
-					make([]byte, 0, len(time.StampNano)),
-					time.StampNano,
-				),
-			),
-		),
+		binary.BigEndian.AppendUint32([]byte{}, rand.Uint32()),
 	)
 }
