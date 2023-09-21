@@ -165,7 +165,7 @@ func run(filename, operation, resource string) error {
 	}
 
 	fmt.Printf("Resource identifier: %q\n\n", resource)
-	tbl := table.New("Time", "Operation", "Data", "Context(Map->Resource)").
+	tbl := table.New("Time", "Elapsed", "Operation", "Data", "Context(Map->Resource)").
 		WithHeaderFormatter(
 			color.New(color.FgGreen, color.Underline).SprintfFunc(),
 		).
@@ -175,7 +175,8 @@ func run(filename, operation, resource string) error {
 
 	var last time.Time
 	for _, r := range rows {
-		tbl.AddRow(formatTime(r.ts, &last), r.operation, r.data, r.context)
+		timestamp, elapsed := formatTime(r.ts, &last)
+		tbl.AddRow(timestamp, elapsed, r.operation, r.data, r.context)
 	}
 	tbl.Print()
 
@@ -217,18 +218,18 @@ func formatAcquisitionOperation(e logsv1.AcquisitionEvent) string {
 	}
 }
 
-func formatTime(ts int64, last *time.Time) string {
+func formatTime(ts int64, last *time.Time) (string, string) {
 	t := time.Unix(0, ts)
 	defer func() {
 		*last = t
 	}()
 	s := t.Format("2006-01-02 15:04:05.999999999")
 	if last.IsZero() {
-		return s
+		return s, ""
 	}
 	diff := t.Sub(*last)
 	if diff >= 0 {
-		return fmt.Sprintf("%s(+%s)", s, diff)
+		return s, "+" + diff.String()
 	}
-	return fmt.Sprintf("%s(%s)", s, diff)
+	return s, diff.String()
 }
