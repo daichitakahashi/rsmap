@@ -110,7 +110,7 @@ func run(filename, operation, resource string) error {
 			}
 			insert(row{
 				ts:        l.Timestamp,
-				operation: "server:" + l.Event.String(),
+				operation: formatServerOperation(l.Event),
 				context:   logs.CallerContext(l.Context).String(),
 				data:      data,
 			})
@@ -130,7 +130,7 @@ func run(filename, operation, resource string) error {
 		for _, l := range r.Logs {
 			insert(row{
 				ts:        l.Timestamp,
-				operation: "init:" + l.Event.String(),
+				operation: formatInitOperation(l.Event),
 				context:   logs.CallerContext(l.Context).String(),
 				data:      "",
 			})
@@ -157,7 +157,7 @@ func run(filename, operation, resource string) error {
 			}
 			insert(row{
 				ts:        l.Timestamp,
-				operation: l.Event.String(),
+				operation: formatAcquisitionOperation(l.Event),
 				context:   logs.CallerContext(l.Context).String(),
 				data:      data,
 			})
@@ -180,6 +180,41 @@ func run(filename, operation, resource string) error {
 	tbl.Print()
 
 	return nil
+}
+
+func formatServerOperation(e logsv1.ServerEvent) string {
+	switch e {
+	case logsv1.ServerEvent_SERVER_EVENT_LAUNCHED:
+		return "server:launched"
+	case logsv1.ServerEvent_SERVER_EVENT_STOPPED:
+		return "server:stopped"
+	default:
+		return e.String()
+	}
+}
+
+func formatInitOperation(e logsv1.InitEvent) string {
+	switch e {
+	case logsv1.InitEvent_INIT_EVENT_STARTED:
+		return "init:started"
+	case logsv1.InitEvent_INIT_EVENT_COMPLETED:
+		return "init:completed"
+	case logsv1.InitEvent_INIT_EVENT_FAILED:
+		return "init:failed"
+	default:
+		return e.String()
+	}
+}
+
+func formatAcquisitionOperation(e logsv1.AcquisitionEvent) string {
+	switch e {
+	case logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED:
+		return "acquired"
+	case logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED:
+		return "released"
+	default:
+		return e.String()
+	}
 }
 
 func formatTime(ts int64, last *time.Time) string {
