@@ -65,7 +65,7 @@ func (p *tablePrinter) insertServerLogs(sl []*logsv1.ServerLog) {
 	for _, l := range sl {
 		var data string
 		if l.Event == logsv1.ServerEvent_SERVER_EVENT_LAUNCHED {
-			data = fmt.Sprintf("addr=%s", l.Addr)
+			data = l.Addr
 		}
 		p.insert(row{
 			ts:        l.Timestamp,
@@ -91,13 +91,26 @@ func (p *tablePrinter) insertInitLogs(resource string, il []*logsv1.InitLog) {
 func (p *tablePrinter) insertAcquisitionLogs(resource string, r *logsv1.AcquisitionRecord) {
 	_ = resource
 
-	for i, l := range r.Logs {
-		var data string
-		if i == 0 {
-			data = fmt.Sprintf("Max=%d,", r.Max)
-		}
+	var (
+		acquired = map[string]int64{}
+		total    int64
+	)
+
+	for _, l := range r.Logs {
+		var (
+			data string
+			cc   = logs.CallerContext(l.Context).ShortString()
+		)
 		if l.Event == logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED {
-			data = fmt.Sprintf("%sN=%d", data, l.N)
+			total += l.N
+			acquired[cc] = l.N
+			data = fmt.Sprintf("+%d(%d/%d)", l.N, total, r.Max)
+		} else {
+			if n, ok := acquired[cc]; ok {
+				total -= n
+				delete(acquired, cc)
+				data = fmt.Sprintf("-%d(%d/%d)", n, total, r.Max)
+			}
 		}
 		p.insert(row{
 			ts:        l.Timestamp,
