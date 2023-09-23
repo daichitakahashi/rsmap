@@ -49,7 +49,6 @@ jobs:
       with:
         path: './.cov'
         retention-days: "7"
-      if: github.ref == 'refs/heads/main'
 
   deploy-coverage:
     runs-on: ubuntu-latest
