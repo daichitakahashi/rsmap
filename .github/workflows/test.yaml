@@ -28,19 +28,17 @@ jobs:
         check-latest: true
     - name: Test
       run: go test -race -coverprofile coverage.out -covermode atomic ./...
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Generate coverage
       if: github.ref == 'refs/heads/main' && runner.os == 'Linux'
       run: |
         mkdir -p .cov
         go tool cover -html=coverage.out -o ./.cov/coverage.html
         go tool cover -func=coverage.out
-        export COVERAGE=$$(go tool cover -func=coverage.out | tail -n 1 | awk '{print $$3}') && \
+        export COVERAGE=$(go tool cover -func=coverage.out | tail -n 1 | awk '{print $$3}')
         echo "{\
           \"schemaVersion\": 1,\
           \"label\": \"coverage\",\
-          \"message\": \"$${COVERAGE}\",\
+          \"message\": \"${COVERAGE}\",\
           \"color\": \"blue\"\
         }" > ./.cov/coverage.json
     - name: Upload coverage
