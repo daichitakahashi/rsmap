@@ -14,18 +14,24 @@ type initCtl struct {
 	_lock chan struct{}
 	// _t      *time.Timer   // For timeout of started init operation.
 	completed *atomic.Bool
-	operator  string
+	operator  *atomic.Pointer[string]
 }
 
 // Create new initCtl.
 func newInitCtl(completed bool) *initCtl {
-	var c atomic.Bool
+	var (
+		c atomic.Bool
+		o atomic.Pointer[string]
+	)
 	if completed {
 		c.Store(completed)
 	}
+	o.Store(new(string))
+
 	return &initCtl{
 		_lock:     make(chan struct{}, 1), // allocate minimum buffer
 		completed: &c,
+		operator:  &o,
 	}
 }
 
@@ -45,7 +51,7 @@ func (c *initCtl) tryInit(ctx context.Context, operator string, fn func(try bool
 		}
 
 		// Set current operator.
-		c.operator = operator
+		c.operator.Store(&operator)
 
 		if err := fn(true); err != nil {
 			return err
@@ -59,7 +65,7 @@ func (c *initCtl) tryInit(ctx context.Context, operator string, fn func(try bool
 
 // Mark init operation as completed.
 func (c *initCtl) complete(operator string, fn func() error) error {
-	if c.operator != operator {
+	if *c.operator.Load() != operator {
 		return errors.New("invalid operation")
 	}
 
@@ -76,7 +82,7 @@ func (c *initCtl) complete(operator string, fn func() error) error {
 
 // Mark init operation by operator as failed.
 func (c *initCtl) fail(operator string, fn func() error) error {
-	if c.operator != operator {
+	if *c.operator.Load() != operator {
 		return errors.New("invalid operation")
 	}
 
