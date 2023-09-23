@@ -1,2 +1,4 @@
 .DS_Store
 .rsmap
+.cov
+coverage.out
