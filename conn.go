@@ -139,7 +139,7 @@ func (m *Map) launchServer(dir string, callers logs.CallerContext) func() {
 
 		// Replace resourceMap with serverSideMap.
 		m._mu.Lock()
-		m.rm = rm
+		m._rm = rm
 		m._mu.Unlock()
 
 		<-dep.Aborted()

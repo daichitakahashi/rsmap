@@ -26,7 +26,7 @@ type (
 		_callers logs.CallerContext
 		_cfg     config
 		_mu      sync.RWMutex
-		rm       resourceMap
+		_rm      resourceMap
 		_stop    func()
 	}
 
@@ -140,7 +140,7 @@ func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 	m := &Map{
 		_callers: callers,
 		_cfg:     cfg,
-		rm:       newClientSideMap(cfg),
+		_rm:      newClientSideMap(cfg),
 	}
 
 	// Start server launch process, and set release function.
@@ -151,6 +151,12 @@ func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 
 func (m *Map) Close() {
 	m._stop()
+}
+
+func (m *Map) resourceMap() resourceMap {
+	m._mu.RLock()
+	defer m._mu.RUnlock()
+	return m._rm
 }
 
 type (
@@ -208,7 +214,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 		}
 	}
 	m._mu.RLock()
-	rm := m.rm
+	rm := m._rm
 	m._mu.RUnlock()
 	try, err := rm.tryInit(ctx, name, callers)
 	if err != nil {
@@ -220,7 +226,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 			var notPanicked bool
 			defer func() {
 				m._mu.RLock()
-				rm := m.rm
+				rm := m._rm
 				m._mu.RUnlock()
 
 				// If init succeeds, mark as complete.
@@ -260,7 +266,7 @@ func (m *Map) Resource(ctx context.Context, name string, opts ...*ResourceOption
 //
 // To release lock, use [UnlockAny].
 func (r *Resource) RLock(ctx context.Context) error {
-	return r._m.rm.acquire(ctx, r._name, r._callers, r._max, false)
+	return r._m.resourceMap().acquire(ctx, r._name, r._callers, r._max, false)
 }
 
 // Lock acquires exclusive lock of the Resource.
@@ -269,12 +275,12 @@ func (r *Resource) RLock(ctx context.Context) error {
 //
 // To release lock, use [UnlockAny].
 func (r *Resource) Lock(ctx context.Context) error {
-	return r._m.rm.acquire(ctx, r._name, r._callers, r._max, true)
+	return r._m.resourceMap().acquire(ctx, r._name, r._callers, r._max, true)
 }
 
 // UnlockAny releases acquired shared/exclusive lock by the Resource.
 func (r *Resource) UnlockAny() error {
-	return r._m.rm.release(context.Background(), r._name, r._callers)
+	return r._m.resourceMap().release(context.Background(), r._name, r._callers)
 }
 
 // Core interface for control operations for both server and client side.
