@@ -122,8 +122,8 @@ func newAcquireCtl(max int64, acquired map[string]int64) *acquireCtl {
 func (c *acquireCtl) acquire(ctx context.Context, operator string, exclusive bool) (int64, error) {
 	c._m.Lock()
 	_, ok := c._acquired[operator]
-	c._m.Unlock()
 	if ok {
+		c._m.Unlock()
 		// If already acquired by this operator, return 0.
 		return 0, nil
 	}
@@ -132,19 +132,24 @@ func (c *acquireCtl) acquire(ctx context.Context, operator string, exclusive boo
 	if exclusive {
 		n = c._max
 	}
+	// Record acquired operator.
+	c._acquired[operator] = n
+	c._m.Unlock()
+
 	if err := c._sem.Acquire(ctx, n); err != nil {
+		c._m.Lock()
+		delete(c._acquired, operator)
+		c._m.Unlock()
 		return 0, err
 	}
 
-	// Record acquired operator.
-	c._acquired[operator] = n
 	return n, nil
 }
 
 func (c *acquireCtl) release(operator string) bool {
 	c._m.Lock()
+	defer c._m.Unlock()
 	n, ok := c._acquired[operator]
-	c._m.Unlock()
 	if !ok {
 		// If not acquired, return without error.
 		return false
