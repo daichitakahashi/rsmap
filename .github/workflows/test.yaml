@@ -1,0 +1,68 @@
+name: Test
+on:
+  push:
+    branches:
+    - "**"
+    paths:
+    - "**.go"
+    - "go.mod"
+    - "go.sum"
+    - ".github/workflows/test"
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+        - ubuntu-latest
+        - macOS-latest
+        - windows-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup go
+      uses: actions/setup-go@v4
+      with:
+        go-version: "1.21"
+        check-latest: true
+    - name: Test
+      run: go test -race -coverprofile coverage.out -covermode atomic ./...
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Generate coverage
+      if: github.ref == 'refs/heads/main' && runner.os == 'Linux'
+      run: |
+        mkdir -p .cov
+        go tool cover -html=coverage.out -o ./.cov/coverage.html
+        go tool cover -func=coverage.out
+        export COVERAGE=$$(go tool cover -func=coverage.out | tail -n 1 | awk '{print $$3}') && \
+        echo "{\
+          \"schemaVersion\": 1,\
+          \"label\": \"coverage\",\
+          \"message\": \"$${COVERAGE}\",\
+          \"color\": \"blue\"\
+        }" > ./.cov/coverage.json
+    - name: Upload coverage
+      if: github.ref == 'refs/heads/main' && runner.os == 'Linux'
+      uses: actions/upload-pages-artifact@v1
+      with:
+        path: './.cov'
+        retention-days: "7"
+      if: github.ref == 'refs/heads/main'
+
+  deploy-coverage:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@main
