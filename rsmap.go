@@ -121,8 +121,9 @@ func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 		dbFile:   filepath.Join(dir, "logs.db"),
 		addrFile: filepath.Join(dir, "addr"),
 		retryPolicy: backoff.NewConstantPolicy(
-			backoff.WithMaxRetries(10),
-			backoff.WithInterval(time.Millisecond*100),
+			// FIXME: Reconsider default policy.
+			backoff.WithMaxRetries(200),
+			backoff.WithInterval(time.Millisecond*200),
 		),
 		httpCli: &http.Client{},
 	}
