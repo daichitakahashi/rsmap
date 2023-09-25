@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daichitakahashi/rsmap/internal/ctl"
 	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 	"github.com/daichitakahashi/rsmap/logs"
 )
@@ -34,12 +35,11 @@ func loadInitController(store logs.ResourceRecordStore[logsv1.InitRecord]) (*ini
 		}
 
 		completed := last.Event == logsv1.InitEvent_INIT_EVENT_COMPLETED
-		ctl := newInitCtl(completed)
+		ctl := ctl.NewInitCtl(completed)
 		if !completed {
-			_ = ctl.tryInit(
+			<-ctl.TryInit(
 				context.Background(),
 				logs.CallerContext(last.Context).String(),
-				func(try bool) error { return nil },
 			)
 		}
 		c._resources.Store(name, ctl)
@@ -51,38 +51,32 @@ func loadInitController(store logs.ResourceRecordStore[logsv1.InitRecord]) (*ini
 	return c, nil
 }
 
-func (c *initController) tryInit(ctx context.Context, resourceName string, operator logs.CallerContext) (try bool, _ error) {
-	v, _ := c._resources.LoadOrStore(resourceName, newInitCtl(false))
-	ctl := v.(*initCtl)
+func (c *initController) tryInit(ctx context.Context, resourceName string, operator logs.CallerContext) (bool, error) {
+	v, _ := c._resources.LoadOrStore(resourceName, ctl.NewInitCtl(false))
+	ctl := v.(*ctl.InitCtl)
 
-	op := operator.String()
-
-	// If the operator acquires lock for init but the fact is not recognized by operator,
-	// give a second chance to do init.
-	if !ctl.completed.Load() && *ctl.operator.Load() == op {
-		return true, nil
+	result := <-ctl.TryInit(ctx, operator.String())
+	if result.Err != nil {
+		return false, result.Err
+	}
+	if !result.Try {
+		return false, nil
 	}
 
-	err := ctl.tryInit(ctx, op, func(_try bool) error {
-		try = _try
-		if !try {
-			return nil
-		}
-
+	if result.Initiated {
 		// Update data on key value store.
-		return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
+		err := c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
 			r.Logs = append(r.Logs, &logsv1.InitLog{
 				Event:     logsv1.InitEvent_INIT_EVENT_STARTED,
 				Context:   operator,
 				Timestamp: time.Now().UnixNano(),
 			})
 		})
-	})
-	if err != nil {
-		return false, err
+		if err != nil {
+			return false, err
+		}
 	}
-
-	return try, nil
+	return true, nil
 }
 
 func (c *initController) complete(resourceName string, operator logs.CallerContext) error {
@@ -90,15 +84,18 @@ func (c *initController) complete(resourceName string, operator logs.CallerConte
 	if !found {
 		return errors.New("resource not found")
 	}
-	ctl := v.(*initCtl)
+	ctl := v.(*ctl.InitCtl)
 
-	return ctl.complete(operator.String(), func() error {
-		return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
-			r.Logs = append(r.Logs, &logsv1.InitLog{
-				Event:     logsv1.InitEvent_INIT_EVENT_COMPLETED,
-				Context:   operator,
-				Timestamp: time.Now().UnixNano(),
-			})
+	err := ctl.Complete(operator.String())
+	if err != nil {
+		return err
+	}
+
+	return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
+		r.Logs = append(r.Logs, &logsv1.InitLog{
+			Event:     logsv1.InitEvent_INIT_EVENT_COMPLETED,
+			Context:   operator,
+			Timestamp: time.Now().UnixNano(),
 		})
 	})
 }
@@ -108,15 +105,18 @@ func (c *initController) fail(resourceName string, operator logs.CallerContext) 
 	if !found {
 		return errors.New("resource not found")
 	}
-	ctl := v.(*initCtl)
+	ctl := v.(*ctl.InitCtl)
 
-	return ctl.fail(operator.String(), func() error {
-		return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
-			r.Logs = append(r.Logs, &logsv1.InitLog{
-				Event:     logsv1.InitEvent_INIT_EVENT_FAILED,
-				Context:   operator,
-				Timestamp: time.Now().UnixNano(),
-			})
+	err := ctl.Fail(operator.String())
+	if err != nil {
+		return err
+	}
+
+	return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
+		r.Logs = append(r.Logs, &logsv1.InitLog{
+			Event:     logsv1.InitEvent_INIT_EVENT_FAILED,
+			Context:   operator,
+			Timestamp: time.Now().UnixNano(),
 		})
 	})
 }
@@ -151,7 +151,7 @@ func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionReco
 		// Set replayed acquireCtl.
 		c._resources.Store(
 			name,
-			newAcquireCtl(obj.Max, acquired),
+			ctl.NewAcquisitionCtl(obj.Max, acquired),
 		)
 		return nil
 	})
@@ -162,14 +162,14 @@ func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionReco
 }
 
 func (c *acquireController) acquire(ctx context.Context, resourceName string, operator logs.CallerContext, max int64, exclusive bool) error {
-	v, _ := c._resources.LoadOrStore(resourceName, newAcquireCtl(max, map[string]int64{}))
-	ctl := v.(*acquireCtl)
+	v, _ := c._resources.LoadOrStore(resourceName, ctl.NewAcquisitionCtl(max, map[string]int64{}))
+	ctl := v.(*ctl.AcquisitionCtl)
 
-	n, err := ctl.acquire(ctx, operator.String(), exclusive)
-	if err != nil {
-		return err
+	result := <-ctl.Acquire(ctx, operator.String(), exclusive)
+	if result.Err != nil {
+		return result.Err
 	}
-	if n == 0 {
+	if result.Acquired == 0 {
 		// Due to trial of consecutive acquisition, not acquired actually.
 		return nil
 	}
@@ -181,7 +181,7 @@ func (c *acquireController) acquire(ctx context.Context, resourceName string, op
 		}
 		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
 			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
-			N:         n,
+			N:         result.Acquired,
 			Context:   operator,
 			Timestamp: time.Now().UnixNano(),
 		})
@@ -194,8 +194,8 @@ func (c *acquireController) release(resourceName string, operator logs.CallerCon
 		// If the resource not found, return without error.
 		return nil
 	}
-	ctl := v.(*acquireCtl)
-	if released := ctl.release(operator.String()); !released {
+	ctl := v.(*ctl.AcquisitionCtl)
+	if released := ctl.Release(operator.String()); !released {
 		// If not acquired, return without error.
 		return nil
 	}
