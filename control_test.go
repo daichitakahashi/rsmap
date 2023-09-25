@@ -25,6 +25,17 @@ func asyncResult[T any](fn func() T) (result <-chan T) {
 	return ch
 }
 
+func openDB(t *testing.T) *bbolt.DB {
+	t.Helper()
+
+	db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
+	assert.NilError(t, err)
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+	return db
+}
+
 var (
 	callerAlice = logs.CallerContext{
 		{
@@ -85,16 +96,11 @@ func TestInitController(t *testing.T) {
 	t.Run("Init will be performed only once", func(t *testing.T) {
 		t.Parallel()
 
-		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-
+		db := openDB(t)
 		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
-		ctl, err := loadInitController(store)
+		ctl, err := loadInitController(store, nil)
 		assert.NilError(t, err)
 
 		// Start init by Alice.
@@ -156,16 +162,11 @@ func TestInitController(t *testing.T) {
 	t.Run("Consecutive try by same operator should be succeeded", func(t *testing.T) {
 		t.Parallel()
 
-		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-
+		db := openDB(t)
 		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
-		ctl, err := loadInitController(store)
+		ctl, err := loadInitController(store, nil)
 		assert.NilError(t, err)
 
 		// Start init by Alice.
@@ -194,16 +195,11 @@ func TestInitController(t *testing.T) {
 	t.Run("Retry is allowed after the failure of first init", func(t *testing.T) {
 		t.Parallel()
 
-		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-
+		db := openDB(t)
 		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
-		ctl, err := loadInitController(store)
+		ctl, err := loadInitController(store, nil)
 		assert.NilError(t, err)
 
 		var (
@@ -255,12 +251,7 @@ func TestInitController(t *testing.T) {
 	t.Run("Replay the status that init is in progress", func(t *testing.T) {
 		t.Parallel()
 
-		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-
+		db := openDB(t)
 		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
@@ -275,7 +266,7 @@ func TestInitController(t *testing.T) {
 			}),
 		)
 
-		ctl, err := loadInitController(store)
+		ctl, err := loadInitController(store, nil)
 		assert.NilError(t, err)
 
 		// Bob's try, timed out.
@@ -312,12 +303,7 @@ func TestInitController(t *testing.T) {
 	t.Run("Replay the status that init is completed", func(t *testing.T) {
 		t.Parallel()
 
-		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-
+		db := openDB(t)
 		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
@@ -337,7 +323,7 @@ func TestInitController(t *testing.T) {
 			}),
 		)
 
-		ctl, err := loadInitController(store)
+		ctl, err := loadInitController(store, nil)
 		assert.NilError(t, err)
 
 		// Bob tries init, but already completed by Alice.
@@ -349,16 +335,11 @@ func TestInitController(t *testing.T) {
 	t.Run("Replay the status that init is failed", func(t *testing.T) {
 		t.Parallel()
 
-		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-
+		db := openDB(t)
 		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 		assert.NilError(t, err)
 
-		ctl, err := loadInitController(store)
+		ctl, err := loadInitController(store, nil)
 		assert.NilError(t, err)
 
 		// Setup situation that init has failed.
@@ -366,7 +347,7 @@ func TestInitController(t *testing.T) {
 		assert.NilError(t, err)
 		assert.NilError(t, ctl.fail("treasure", callerAlice))
 
-		replayed, err := loadInitController(store)
+		replayed, err := loadInitController(store, nil)
 		assert.NilError(t, err)
 
 		// Bob retries.
@@ -374,6 +355,61 @@ func TestInitController(t *testing.T) {
 		assert.NilError(t, err)
 		assert.Assert(t, try)
 		assert.NilError(t, replayed.complete("treasure", callerBob))
+	})
+
+	t.Run("'Closing' interrupts acquisition", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			db      = openDB(t)
+			closing = make(chan struct{})
+			eg      errgroup.Group
+		)
+
+		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
+		assert.NilError(t, err)
+
+		ctl, err := loadInitController(store, closing)
+		assert.NilError(t, err)
+
+		// Try init by Alice.
+		try, err := ctl.tryInit(background, "treasure", callerAlice)
+		assert.NilError(t, err)
+		assert.Assert(t, try)
+		eg.Go(func() error {
+			// Alice reports success of init after 200ms.
+			time.Sleep(time.Millisecond * 200)
+			return ctl.complete("treasure", callerAlice)
+		})
+
+		// "closing" occurred while Bob tries to init.
+		eg.Go(func() error {
+			time.Sleep(time.Millisecond * 100)
+			close(closing)
+			return nil
+		})
+
+		// Bob's try will be canceled.
+		try, err = ctl.tryInit(background, "treasure", callerBob)
+		assert.ErrorIs(t, err, errClosing)
+		assert.Assert(t, !try)
+
+		// Completion report by Alice also fails.
+		assert.ErrorIs(t, eg.Wait(), errClosing)
+		// Failure report fails too.
+		assert.ErrorIs(t, ctl.fail("treasure", callerAlice), errClosing)
+
+		// Check stored logs.
+		r, err := store.Get("treasure")
+		assert.NilError(t, err)
+		assert.DeepEqual(t, r, &logsv1.InitRecord{
+			Logs: []*logsv1.InitLog{
+				{
+					Event:   logsv1.InitEvent_INIT_EVENT_STARTED,
+					Context: callerAlice,
+				},
+			},
+		}, protoCmpOpts...)
 	})
 }
 
@@ -383,16 +419,11 @@ func TestAcquireController(t *testing.T) {
 	t.Run("Lock works fine and logs are preserved correctly", func(t *testing.T) {
 		t.Parallel()
 
-		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-
+		db := openDB(t)
 		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 
-		ctl, err := loadAcquireController(store)
+		ctl, err := loadAcquireController(store, nil)
 		assert.NilError(t, err)
 
 		// Acquire shared lock by Alice and Bob.
@@ -462,16 +493,11 @@ func TestAcquireController(t *testing.T) {
 	t.Run("Consecutive acquire and release are succeeds but not recorded logs", func(t *testing.T) {
 		t.Parallel()
 
-		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-
+		db := openDB(t)
 		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 
-		ctl, err := loadAcquireController(store)
+		ctl, err := loadAcquireController(store, nil)
 		assert.NilError(t, err)
 
 		// First acquisition.
@@ -514,12 +540,7 @@ func TestAcquireController(t *testing.T) {
 	t.Run("Replay acquisition status correctly", func(t *testing.T) {
 		t.Parallel()
 
-		db, err := bbolt.Open(filepath.Join(t.TempDir(), "logs.db"), 0644, nil)
-		assert.NilError(t, err)
-		t.Cleanup(func() {
-			_ = db.Close()
-		})
-
+		db := openDB(t)
 		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 
@@ -560,7 +581,7 @@ func TestAcquireController(t *testing.T) {
 			}),
 		)
 
-		ctl, err := loadAcquireController(store)
+		ctl, err := loadAcquireController(store, nil)
 		assert.NilError(t, err)
 
 		{
@@ -651,5 +672,61 @@ func TestAcquireController(t *testing.T) {
 				},
 			}, protoCmpOpts...)
 		}
+	})
+
+	t.Run("'Closing' interrupts acquisition", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			db      = openDB(t)
+			closing = make(chan struct{})
+			eg      errgroup.Group
+		)
+
+		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
+		assert.NilError(t, err)
+
+		ctl, err := loadAcquireController(store, closing)
+		assert.NilError(t, err)
+
+		// First acquisition by Alice.
+		assert.NilError(t,
+			ctl.acquire(background, "treasure", callerAlice, 5, true),
+		)
+		eg.Go(func() error {
+			// Alice releases after 200ms.
+			time.Sleep(time.Millisecond * 200)
+			return ctl.release("treasure", callerAlice)
+		})
+
+		// "closing" occurred while Bob tries to acquire.
+		eg.Go(func() error {
+			time.Sleep(time.Millisecond * 100)
+			close(closing)
+			return nil
+		})
+
+		// Bob's try will be canceled.
+		assert.ErrorIs(t,
+			ctl.acquire(background, "treasure", callerBob, 5, true),
+			errClosing,
+		)
+
+		// Release by Alice also fails.
+		assert.ErrorIs(t, eg.Wait(), errClosing)
+
+		// Check stored logs.
+		r, err := store.Get("treasure")
+		assert.NilError(t, err)
+		assert.DeepEqual(t, r, &logsv1.AcquisitionRecord{
+			Max: 5,
+			Logs: []*logsv1.AcquisitionLog{
+				{
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
+					N:       5,
+					Context: callerAlice,
+				},
+			},
+		}, protoCmpOpts...)
 	})
 }

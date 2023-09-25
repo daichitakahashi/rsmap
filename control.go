@@ -14,14 +14,18 @@ import (
 // TODO
 // * timeout for init and acquisition
 
+var errClosing = errors.New("closing")
+
 type initController struct {
 	_store     logs.ResourceRecordStore[logsv1.InitRecord]
 	_resources sync.Map
+	_closing   <-chan struct{}
 }
 
-func loadInitController(store logs.ResourceRecordStore[logsv1.InitRecord]) (*initController, error) {
+func loadInitController(store logs.ResourceRecordStore[logsv1.InitRecord], closing <-chan struct{}) (*initController, error) {
 	c := &initController{
-		_store: store,
+		_store:   store,
+		_closing: closing,
 	}
 	err := c._store.ForEach(func(name string, obj *logsv1.InitRecord) error {
 		if len(obj.Logs) == 0 {
@@ -35,14 +39,14 @@ func loadInitController(store logs.ResourceRecordStore[logsv1.InitRecord]) (*ini
 		}
 
 		completed := last.Event == logsv1.InitEvent_INIT_EVENT_COMPLETED
-		ctl := ctl.NewInitCtl(completed)
+		initCtl := ctl.NewInitCtl(completed)
 		if !completed {
-			<-ctl.TryInit(
+			<-initCtl.TryInit(
 				context.Background(),
 				logs.CallerContext(last.Context).String(),
 			)
 		}
-		c._resources.Store(name, ctl)
+		c._resources.Store(name, initCtl)
 		return nil
 	})
 	if err != nil {
@@ -53,14 +57,19 @@ func loadInitController(store logs.ResourceRecordStore[logsv1.InitRecord]) (*ini
 
 func (c *initController) tryInit(ctx context.Context, resourceName string, operator logs.CallerContext) (bool, error) {
 	v, _ := c._resources.LoadOrStore(resourceName, ctl.NewInitCtl(false))
-	ctl := v.(*ctl.InitCtl)
+	initCtl := v.(*ctl.InitCtl)
 
-	result := <-ctl.TryInit(ctx, operator.String())
-	if result.Err != nil {
-		return false, result.Err
-	}
-	if !result.Try {
-		return false, nil
+	var result ctl.TryInitResult
+	select {
+	case <-c._closing:
+		return false, errClosing
+	case result = <-initCtl.TryInit(ctx, operator.String()):
+		if result.Err != nil {
+			return false, result.Err
+		}
+		if !result.Try {
+			return false, nil
+		}
 	}
 
 	if result.Initiated {
@@ -80,6 +89,12 @@ func (c *initController) tryInit(ctx context.Context, resourceName string, opera
 }
 
 func (c *initController) complete(resourceName string, operator logs.CallerContext) error {
+	select {
+	case <-c._closing:
+		return errClosing
+	default:
+	}
+
 	v, found := c._resources.Load(resourceName)
 	if !found {
 		return errors.New("resource not found")
@@ -101,6 +116,12 @@ func (c *initController) complete(resourceName string, operator logs.CallerConte
 }
 
 func (c *initController) fail(resourceName string, operator logs.CallerContext) error {
+	select {
+	case <-c._closing:
+		return errClosing
+	default:
+	}
+
 	v, found := c._resources.Load(resourceName)
 	if !found {
 		return errors.New("resource not found")
@@ -125,11 +146,13 @@ func (c *initController) fail(resourceName string, operator logs.CallerContext) 
 type acquireController struct {
 	_kv        logs.ResourceRecordStore[logsv1.AcquisitionRecord]
 	_resources sync.Map
+	_closing   <-chan struct{}
 }
 
-func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionRecord]) (*acquireController, error) {
+func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionRecord], closing <-chan struct{}) (*acquireController, error) {
 	c := &acquireController{
-		_kv: store,
+		_kv:      store,
+		_closing: closing,
 	}
 
 	err := store.ForEach(func(name string, obj *logsv1.AcquisitionRecord) error {
@@ -163,15 +186,20 @@ func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionReco
 
 func (c *acquireController) acquire(ctx context.Context, resourceName string, operator logs.CallerContext, max int64, exclusive bool) error {
 	v, _ := c._resources.LoadOrStore(resourceName, ctl.NewAcquisitionCtl(max, map[string]int64{}))
-	ctl := v.(*ctl.AcquisitionCtl)
+	acCtl := v.(*ctl.AcquisitionCtl)
 
-	result := <-ctl.Acquire(ctx, operator.String(), exclusive)
-	if result.Err != nil {
-		return result.Err
-	}
-	if result.Acquired == 0 {
-		// Due to trial of consecutive acquisition, not acquired actually.
-		return nil
+	var result ctl.AcquisitionResult
+	select {
+	case <-c._closing:
+		return errClosing
+	case result = <-acCtl.Acquire(ctx, operator.String(), exclusive):
+		if result.Err != nil {
+			return result.Err
+		}
+		if result.Acquired == 0 {
+			// Due to trial of consecutive acquisition, not acquired actually.
+			return nil
+		}
 	}
 
 	return c._kv.Put(resourceName, func(r *logsv1.AcquisitionRecord, update bool) {
@@ -189,6 +217,12 @@ func (c *acquireController) acquire(ctx context.Context, resourceName string, op
 }
 
 func (c *acquireController) release(resourceName string, operator logs.CallerContext) error {
+	select {
+	case <-c._closing:
+		return errClosing
+	default:
+	}
+
 	v, found := c._resources.Load(resourceName)
 	if !found {
 		// If the resource not found, return without error.

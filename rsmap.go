@@ -300,7 +300,7 @@ type serverSideMap struct {
 
 // Create resourceMap for server side.
 // This map reads and updates bbolt.DB directly.
-func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
+func newServerSideMap(db *bbolt.DB, closing <-chan struct{}) (*serverSideMap, error) {
 	initRecordStore, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 	if err != nil {
 		return nil, err
@@ -310,11 +310,11 @@ func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
 		return nil, err
 	}
 
-	init, err := loadInitController(initRecordStore)
+	init, err := loadInitController(initRecordStore, closing)
 	if err != nil {
 		return nil, err
 	}
-	acquire, err := loadAcquireController(acquireRecordStore)
+	acquire, err := loadAcquireController(acquireRecordStore, closing)
 	if err != nil {
 		return nil, err
 	}
