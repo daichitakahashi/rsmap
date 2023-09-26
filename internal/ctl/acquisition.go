@@ -40,16 +40,15 @@ func NewAcquisitionCtl(max int64, acquired map[string]int64) *AcquisitionCtl {
 }
 
 // Acquire acquires exclusive/shared lock.
-func (c *AcquisitionCtl) Acquire(ctx context.Context, operator string, exclusive bool) <-chan AcquisitionResult {
+func (c *AcquisitionCtl) Acquire(ctx context.Context, operator string, exclusive bool) (<-chan AcquisitionResult, bool) {
 	result := make(chan AcquisitionResult, 1)
 
 	c._m.Lock()
 	_, ok := c._acquired[operator]
 	if ok {
 		c._m.Unlock()
-		result <- AcquisitionResult{}
-		// If already acquired by this operator, return 0.
-		return result
+		// If already acquired by this operator, return without acquisition.
+		return nil, false
 	}
 
 	n := int64(1)
@@ -76,7 +75,7 @@ func (c *AcquisitionCtl) Acquire(ctx context.Context, operator string, exclusive
 		}
 	}()
 
-	return result
+	return result, true
 }
 
 // Release releases acquired lock.

@@ -22,15 +22,22 @@ func TestAcquisitionCtl(t *testing.T) {
 		// Bob's acquisition(exclusive) will be timed out.
 		ctx, cancel := context.WithTimeout(background, time.Millisecond*100)
 		defer cancel()
-		result := <-ctl.Acquire(ctx, "bob", true)
+		acCh, acquiring := ctl.Acquire(ctx, "bob", true)
+		assert.Assert(t, acquiring)
+
+		result := <-acCh
 		assert.ErrorIs(t, result.Err, context.DeadlineExceeded)
-		assert.Equal(t, result.Acquired, int64(0))
+		assert.Assert(t, result.Acquired == 0)
 
 		// Release by Alice.
 		ctl.Release("alice")
 
-		// Bob's acquisition(exclusive) will be succeeds.
-		ctl.Acquire(background, "bob", true)
+		// Bob's acquisition(exclusive) will be succeed.
+		acCh, acquiring = ctl.Acquire(background, "bob", true)
+		assert.Assert(t, acquiring)
+		result = <-acCh
+		assert.NilError(t, result.Err)
+		assert.Assert(t, result.Acquired == 100)
 	})
 
 	t.Run("shared lock", func(t *testing.T) {
@@ -43,15 +50,23 @@ func TestAcquisitionCtl(t *testing.T) {
 		// Charlie's acquisition(shared) will be timed out.
 		ctx, cancel := context.WithTimeout(background, time.Millisecond*100)
 		defer cancel()
-		result := <-ctl.Acquire(ctx, "charlie", false)
+		acCh, acquiring := ctl.Acquire(ctx, "charlie", false)
+		assert.Assert(t, acquiring)
+
+		result := <-acCh
 		assert.ErrorIs(t, result.Err, context.DeadlineExceeded)
-		assert.Equal(t, result.Acquired, int64(0))
+		assert.Assert(t, result.Acquired == 0)
 
 		// Release by Alice(Bob's acquisition is continued).
 		ctl.Release("alice")
 
 		// Charlie's acquisition(shared) will be succeeds.
-		ctl.Acquire(background, "charlie", false)
+		acCh, acquiring = ctl.Acquire(background, "charlie", false)
+		assert.Assert(t, acquiring)
+
+		result = <-acCh
+		assert.NilError(t, result.Err)
+		assert.Assert(t, result.Acquired == 1)
 	})
 
 	t.Run("consecutive acquisition without release returns nil error", func(t *testing.T) {
@@ -59,15 +74,18 @@ func TestAcquisitionCtl(t *testing.T) {
 		ctl := ctl.NewAcquisitionCtl(100, map[string]int64{})
 
 		// First acquisition.
-		result := <-ctl.Acquire(background, "alice", true)
+		acCh, acquiring := ctl.Acquire(background, "alice", true)
+		assert.Assert(t, acquiring)
+
+		result := <-acCh
 		assert.NilError(t, result.Err)
-		assert.Equal(t, result.Acquired, int64(100))
+		assert.Assert(t, result.Acquired == 100)
 
 		// Second acquisition without release.
 		// Acquired weight is 0.
-		result = <-ctl.Acquire(background, "alice", true)
-		assert.NilError(t, result.Err)
-		assert.Equal(t, result.Acquired, int64(0))
+		acCh, acquiring = ctl.Acquire(background, "alice", true)
+		assert.Assert(t, !acquiring)
+		assert.Assert(t, acCh == nil)
 	})
 
 	t.Run("unknown release returns nil error", func(t *testing.T) {

@@ -465,19 +465,31 @@ func TestAcquireController(t *testing.T) {
 			Max: 100,
 			Logs: []*logsv1.AcquisitionLog{
 				{
-					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
-					N:       1,
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
 					Context: callerAlice,
 				}, {
 					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 					N:       1,
+					Context: callerAlice,
+				}, {
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
 					Context: callerBob,
+				}, {
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
+					N:       1,
+					Context: callerBob,
+				}, {
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+					Context: callerCharlie,
 				}, {
 					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 					Context: callerAlice,
 				}, {
 					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 					Context: callerBob,
+				}, {
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+					Context: callerCharlie,
 				}, {
 					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 					N:       100,
@@ -525,6 +537,9 @@ func TestAcquireController(t *testing.T) {
 			Max: 100,
 			Logs: []*logsv1.AcquisitionLog{
 				{
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+					Context: callerAlice,
+				}, {
 					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 					N:       100,
 					Context: callerAlice,
@@ -550,12 +565,20 @@ func TestAcquireController(t *testing.T) {
 				r.Max = 10
 				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
 					{
+						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context:   callerAlice,
+						Timestamp: time.Now().UnixNano(),
+					}, {
 						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:         10,
 						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}, {
 						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
+						Context:   callerAlice,
+						Timestamp: time.Now().UnixNano(),
+					}, {
+						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
 						Context:   callerAlice,
 						Timestamp: time.Now().UnixNano(),
 					}, {
@@ -572,6 +595,10 @@ func TestAcquireController(t *testing.T) {
 				r.Max = 200
 				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
 					{
+						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context:   callerAlice,
+						Timestamp: time.Now().UnixNano(),
+					}, {
 						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:         200,
 						Context:   callerAlice,
@@ -611,6 +638,9 @@ func TestAcquireController(t *testing.T) {
 				Max: 10,
 				Logs: []*logsv1.AcquisitionLog{
 					{
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context: callerAlice,
+					}, {
 						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       10,
 						Context: callerAlice,
@@ -618,9 +648,18 @@ func TestAcquireController(t *testing.T) {
 						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 						Context: callerAlice,
 					}, {
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context: callerAlice,
+					}, {
 						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       1,
 						Context: callerAlice,
+					}, {
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context: callerBob,
+					}, {
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context: callerBob,
 					}, {
 						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       1,
@@ -658,12 +697,21 @@ func TestAcquireController(t *testing.T) {
 				Max: 200,
 				Logs: []*logsv1.AcquisitionLog{
 					{
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context: callerAlice,
+					}, {
 						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       200,
 						Context: callerAlice,
 					}, {
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context: callerBob,
+					}, {
 						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 						Context: callerAlice,
+					}, {
+						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context: callerBob,
 					}, {
 						Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 						N:       1,
@@ -722,9 +770,15 @@ func TestAcquireController(t *testing.T) {
 			Max: 5,
 			Logs: []*logsv1.AcquisitionLog{
 				{
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+					Context: callerAlice,
+				}, {
 					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 					N:       5,
 					Context: callerAlice,
+				}, {
+					Event:   logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+					Context: callerBob,
 				},
 			},
 		}, protoCmpOpts...)

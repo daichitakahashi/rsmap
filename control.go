@@ -185,28 +185,49 @@ func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionReco
 }
 
 func (c *acquireController) acquire(ctx context.Context, resourceName string, operator logs.CallerContext, max int64, exclusive bool) error {
+	select {
+	case <-c._closing:
+		return errClosing
+	default:
+	}
+
 	v, _ := c._resources.LoadOrStore(resourceName, ctl.NewAcquisitionCtl(max, map[string]int64{}))
 	acCtl := v.(*ctl.AcquisitionCtl)
+
+	// Start acquisition.
+	acCh, acquiring := acCtl.Acquire(ctx, operator.String(), exclusive)
+	// Due to trial of consecutive acquisition, not acquired.
+	if !acquiring {
+		return nil
+	}
+
+	// Append log "acquiring".
+	err := c._kv.Put(resourceName, func(r *logsv1.AcquisitionRecord, update bool) {
+		// Initial acquisition.
+		if !update {
+			r.Max = max
+		}
+		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
+			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+			Context:   operator,
+			Timestamp: time.Now().UnixNano(),
+		})
+	})
+	if err != nil {
+		return err
+	}
 
 	var result ctl.AcquisitionResult
 	select {
 	case <-c._closing:
 		return errClosing
-	case result = <-acCtl.Acquire(ctx, operator.String(), exclusive):
+	case result = <-acCh:
 		if result.Err != nil {
 			return result.Err
-		}
-		if result.Acquired == 0 {
-			// Due to trial of consecutive acquisition, not acquired actually.
-			return nil
 		}
 	}
 
 	return c._kv.Put(resourceName, func(r *logsv1.AcquisitionRecord, update bool) {
-		// Initial acquisition.
-		if !update {
-			r.Max = max
-		}
 		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
 			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 			N:         result.Acquired,
