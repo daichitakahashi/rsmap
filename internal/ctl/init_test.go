@@ -1,7 +1,6 @@
 package ctl_test
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,20 +13,10 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/daichitakahashi/rsmap/internal/ctl"
+	"github.com/daichitakahashi/rsmap/internal/testutil"
 )
 
 var background = context.Background()
-
-type safeBuffer struct {
-	*bytes.Buffer
-	m sync.Mutex
-}
-
-func (s *safeBuffer) Write(p []byte) (int, error) {
-	s.m.Lock()
-	defer s.m.Unlock()
-	return s.Buffer.Write(p)
-}
 
 func TestInitCtl(t *testing.T) {
 	t.Parallel()
@@ -40,9 +29,7 @@ func TestInitCtl(t *testing.T) {
 			wg    sync.WaitGroup
 			begin = make(chan struct{})
 			eg    errgroup.Group
-			out   = &safeBuffer{
-				Buffer: bytes.NewBuffer(nil),
-			}
+			out   = testutil.NewSafeBuffer()
 		)
 
 		wg.Add(10)
