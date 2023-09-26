@@ -6,8 +6,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daichitakahashi/oncewait"
+
 	"github.com/daichitakahashi/rsmap/internal/ctl"
 	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
+	"github.com/daichitakahashi/rsmap/internal/rendezvous"
 	"github.com/daichitakahashi/rsmap/logs"
 )
 
@@ -142,12 +145,20 @@ func (c *initController) fail(resourceName string, operator logs.CallerContext) 
 	})
 }
 
-// Control acquisition status and persistence.
-type acquireController struct {
-	_kv        logs.ResourceRecordStore[logsv1.AcquisitionRecord]
-	_resources sync.Map
-	_closing   <-chan struct{}
-}
+type (
+	// Control acquisition status and persistence.
+	acquireController struct {
+		_kv        logs.ResourceRecordStore[logsv1.AcquisitionRecord]
+		_resources sync.Map
+		_closing   <-chan struct{}
+	}
+
+	resource struct {
+		once  *oncewait.OnceWaiter
+		queue rendezvous.LimitedTermQueue
+		ctl   *ctl.AcquisitionCtl
+	}
+)
 
 func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionRecord], closing <-chan struct{}) (*acquireController, error) {
 	c := &acquireController{
@@ -174,7 +185,10 @@ func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionReco
 		// Set replayed acquireCtl.
 		c._resources.Store(
 			name,
-			ctl.NewAcquisitionCtl(obj.Max, acquired),
+			&resource{
+				queue: emptyQueue,
+				ctl:   ctl.NewAcquisitionCtl(obj.Max, acquired),
+			},
 		)
 		return nil
 	})
@@ -184,6 +198,31 @@ func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionReco
 	return c, nil
 }
 
+var emptyQueue = rendezvous.NewBuilder().Start(0)
+
+func (r *resource) init(max int64) *resource {
+	if r.once != nil {
+		r.once.Do(func() {
+			r.queue = emptyQueue
+			r.ctl = ctl.NewAcquisitionCtl(max, map[string]int64{})
+		})
+	}
+	return r
+}
+
+func (r *resource) acquire(ctx context.Context, operator string, exclusive bool) (<-chan ctl.AcquisitionResult, bool) {
+	var (
+		ch        <-chan ctl.AcquisitionResult
+		acquiring bool
+	)
+
+	// Wait dequeuing, because replayed "acquiring" operators take precedence.
+	r.queue.Dequeue(operator, func(bool) {
+		ch, acquiring = r.ctl.Acquire(ctx, operator, exclusive)
+	})
+	return ch, acquiring
+}
+
 func (c *acquireController) acquire(ctx context.Context, resourceName string, operator logs.CallerContext, max int64, exclusive bool) error {
 	select {
 	case <-c._closing:
@@ -191,11 +230,13 @@ func (c *acquireController) acquire(ctx context.Context, resourceName string, op
 	default:
 	}
 
-	v, _ := c._resources.LoadOrStore(resourceName, ctl.NewAcquisitionCtl(max, map[string]int64{}))
-	acCtl := v.(*ctl.AcquisitionCtl)
+	v, _ := c._resources.LoadOrStore(resourceName, &resource{
+		once: oncewait.New(),
+	})
+	r := v.(*resource).init(max)
 
 	// Start acquisition.
-	acCh, acquiring := acCtl.Acquire(ctx, operator.String(), exclusive)
+	acCh, acquiring := r.acquire(ctx, operator.String(), exclusive)
 	// Due to trial of consecutive acquisition, not acquired.
 	if !acquiring {
 		return nil
@@ -249,8 +290,8 @@ func (c *acquireController) release(resourceName string, operator logs.CallerCon
 		// If the resource not found, return without error.
 		return nil
 	}
-	ctl := v.(*ctl.AcquisitionCtl)
-	if released := ctl.Release(operator.String()); !released {
+	r := v.(*resource)
+	if released := r.ctl.Release(operator.String()); !released {
 		// If not acquired, return without error.
 		return nil
 	}
