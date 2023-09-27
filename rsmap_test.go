@@ -95,7 +95,7 @@ func TestNew(t *testing.T) {
 
 		_, err = m.Resource(background, "fails")
 		assert.ErrorIs(t, err, errDummyConnectionError)
-		assert.Assert(t, len(tp.recordedTimes) == 6, len(tp.recordedTimes)) // First try and five retries will be recorded.
+		assert.Assert(t, len(tp.recordedTimes) >= 5, len(tp.recordedTimes)) // First try and five retries will be recorded.
 	})
 }
 

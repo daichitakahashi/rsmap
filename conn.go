@@ -93,7 +93,8 @@ func (m *Map) launchServer(dir string, callers logs.CallerContext) func() {
 			return err
 		}
 
-		rm, err := newServerSideMap(db)
+		closing := make(chan struct{})
+		rm, err := newServerSideMap(db, closing)
 		if err != nil {
 			return err
 		}
@@ -143,6 +144,7 @@ func (m *Map) launchServer(dir string, callers logs.CallerContext) func() {
 		m._mu.Unlock()
 
 		<-dep.Aborted()
+		close(closing)
 		_ = s.Shutdown(dep.AbortContext())
 
 		// Record stopped server.

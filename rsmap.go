@@ -121,8 +121,9 @@ func New(rsmapDir string, opts ...*NewOption) (*Map, error) {
 		dbFile:   filepath.Join(dir, "logs.db"),
 		addrFile: filepath.Join(dir, "addr"),
 		retryPolicy: backoff.NewConstantPolicy(
-			backoff.WithMaxRetries(10),
-			backoff.WithInterval(time.Millisecond*100),
+			// FIXME: Reconsider default policy.
+			backoff.WithMaxRetries(200),
+			backoff.WithInterval(time.Millisecond*200),
 		),
 		httpCli: &http.Client{},
 	}
@@ -299,7 +300,7 @@ type serverSideMap struct {
 
 // Create resourceMap for server side.
 // This map reads and updates bbolt.DB directly.
-func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
+func newServerSideMap(db *bbolt.DB, closing <-chan struct{}) (*serverSideMap, error) {
 	initRecordStore, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
 	if err != nil {
 		return nil, err
@@ -309,11 +310,11 @@ func newServerSideMap(db *bbolt.DB) (*serverSideMap, error) {
 		return nil, err
 	}
 
-	init, err := loadInitController(initRecordStore)
+	init, err := loadInitController(initRecordStore, closing)
 	if err != nil {
 		return nil, err
 	}
-	acquire, err := loadAcquireController(acquireRecordStore)
+	acquire, err := loadAcquireController(acquireRecordStore, time.Second*2, closing)
 	if err != nil {
 		return nil, err
 	}

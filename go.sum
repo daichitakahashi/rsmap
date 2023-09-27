@@ -2,6 +2,8 @@ github.com/bufbuild/connect-go v1.10.0 h1:QAJ3G9A1OYQW2Jbk3DeoJbkCxuKArrvZgDt47m
 github.com/bufbuild/connect-go v1.10.0/go.mod h1:CAIePUgkDR5pAFaylSMtNK45ANQjp9JvpluG20rhpV8=
 github.com/daichitakahashi/deps v0.0.3 h1:vrKRLKImytA9+fLpY1lnUML8IvdCviGWOYKtdaiKN80=
 github.com/daichitakahashi/deps v0.0.3/go.mod h1:DPuGCNSqHuSkQpNdugtW1rK3UnUak4H0gCxqHrtouEk=
+github.com/daichitakahashi/oncewait v1.0.0 h1:ANXeuO0JVVL4MPi8RlCB9sS1CffBV25Ux1ltc1MHrtA=
+github.com/daichitakahashi/oncewait v1.0.0/go.mod h1:KharQPUGj322xxiHjngOTcyKTLCTz8/FoUEQ918ZHCM=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

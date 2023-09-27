@@ -3,10 +3,11 @@ package logs
 import (
 	"errors"
 
-	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 	"go.etcd.io/bbolt"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+
+	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
 )
 
 var (
