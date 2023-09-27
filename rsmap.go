@@ -68,6 +68,8 @@ const (
 	EnvExecutionID = "RSMAP_EXECUTION_ID"
 )
 
+// ディレクトリの存在判定までやる。
+// さらに、logs.dbやaddrの名前でディレクトリが存在しないことまで確認する。
 func logsDir(base string) (string, error) {
 	if !filepath.IsAbs(base) {
 		wd, err := os.Getwd()
@@ -80,6 +82,19 @@ func logsDir(base string) (string, error) {
 	executionID := strconv.Itoa(os.Getppid()) // The process of `go test`
 	if id, ok := os.LookupEnv(EnvExecutionID); ok {
 		executionID = id
+	}
+	dir := filepath.Join(base, executionID)
+
+	// Check logs.db and addr not exists as directory.
+	logsFilename := filepath.Join(dir, "logs.db")
+	info, err := os.Stat(logsFilename)
+	if err == nil && info.IsDir() {
+		return "", fmt.Errorf("logs.db already exists as a directory: %s", logsFilename)
+	}
+	addrFilename := filepath.Join(dir, "addr")
+	info, err = os.Stat(addrFilename)
+	if err == nil && info.IsDir() {
+		return "", fmt.Errorf("addr already exists as a directory: %s", addrFilename)
 	}
 
 	return filepath.Join(base, executionID), nil

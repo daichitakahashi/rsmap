@@ -99,6 +99,36 @@ func TestNew(t *testing.T) {
 	})
 }
 
+func TestNew_FilesExistAsDirectory(t *testing.T) {
+	t.Parallel()
+
+	t.Run("logs.db", func(t *testing.T) {
+		t.Parallel()
+
+		assert.NilError(t, os.Setenv(EnvExecutionID, "0"))
+		dir := t.TempDir()
+
+		// Create logs.db as a directory.
+		assert.NilError(t, os.MkdirAll(filepath.Join(dir, "0", "logs.db"), 0755))
+
+		_, err := New(dir)
+		assert.Assert(t, err != nil)
+	})
+
+	t.Run("addr", func(t *testing.T) {
+		t.Parallel()
+
+		assert.NilError(t, os.Setenv(EnvExecutionID, "0"))
+		dir := t.TempDir()
+
+		// Create logs.db as a directory.
+		assert.NilError(t, os.MkdirAll(filepath.Join(dir, "0", "addr"), 0755))
+
+		_, err := New(dir)
+		assert.Assert(t, err != nil)
+	})
+}
+
 func TestMap_Resource(t *testing.T) {
 	t.Parallel()
 
