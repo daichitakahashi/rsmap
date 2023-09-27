@@ -160,7 +160,7 @@ type (
 	}
 )
 
-func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionRecord], closing <-chan struct{}) (*acquireController, error) {
+func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionRecord], acquiringQueueTimeout time.Duration, closing <-chan struct{}) (*acquireController, error) {
 	c := &acquireController{
 		_kv:      store,
 		_closing: closing,
@@ -168,25 +168,32 @@ func loadAcquireController(store logs.ResourceRecordStore[logsv1.AcquisitionReco
 
 	err := store.ForEach(func(name string, obj *logsv1.AcquisitionRecord) error {
 		acquired := map[string]int64{}
+		b := rendezvous.NewBuilder()
 		// Replay stored acquisitions of the resource.
 		for _, log := range obj.Logs {
+			operator := logs.CallerContext(log.Context).String()
 			switch log.Event {
+			case logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING:
+				// Queue as "acquiring".
+				b.Add(operator)
 			case logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED:
 				// Consecutive acquisition is not recorded.
 				// So, we can skip the check of existing value.
 				//
-				// See: `(*acquireCtl).acquire()`
-				acquired[logs.CallerContext(log.Context).String()] = log.N
+				// See: `(*ctl.AcquisitionCtl).Acquire()`
+				acquired[operator] = log.N
+				// Remove already acquired operation from queue.
+				b.Remove(operator)
 			case logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED:
 				// We assume that acquisition log is already processed.
-				delete(acquired, logs.CallerContext(log.Context).String())
+				delete(acquired, operator)
 			}
 		}
 		// Set replayed acquireCtl.
 		c._resources.Store(
 			name,
 			&resource{
-				queue: emptyQueue,
+				queue: b.Start(acquiringQueueTimeout),
 				ctl:   ctl.NewAcquisitionCtl(obj.Max, acquired),
 			},
 		)

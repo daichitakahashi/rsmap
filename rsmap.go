@@ -314,7 +314,7 @@ func newServerSideMap(db *bbolt.DB, closing <-chan struct{}) (*serverSideMap, er
 	if err != nil {
 		return nil, err
 	}
-	acquire, err := loadAcquireController(acquireRecordStore, closing)
+	acquire, err := loadAcquireController(acquireRecordStore, time.Second*2, closing)
 	if err != nil {
 		return nil, err
 	}

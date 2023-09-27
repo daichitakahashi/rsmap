@@ -3,7 +3,9 @@ package rsmap
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
+	"github.com/daichitakahashi/rsmap/internal/testutil"
 	"github.com/daichitakahashi/rsmap/logs"
 )
 
@@ -423,7 +426,7 @@ func TestAcquireController(t *testing.T) {
 		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 
-		ctl, err := loadAcquireController(store, nil)
+		ctl, err := loadAcquireController(store, time.Second, nil)
 		assert.NilError(t, err)
 
 		// Acquire shared lock by Alice and Bob.
@@ -509,7 +512,7 @@ func TestAcquireController(t *testing.T) {
 		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 
-		ctl, err := loadAcquireController(store, nil)
+		ctl, err := loadAcquireController(store, time.Second, nil)
 		assert.NilError(t, err)
 
 		// First acquisition.
@@ -608,7 +611,7 @@ func TestAcquireController(t *testing.T) {
 			}),
 		)
 
-		ctl, err := loadAcquireController(store, nil)
+		ctl, err := loadAcquireController(store, time.Second, nil)
 		assert.NilError(t, err)
 
 		{
@@ -730,11 +733,10 @@ func TestAcquireController(t *testing.T) {
 			closing = make(chan struct{})
 			eg      errgroup.Group
 		)
-
 		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 
-		ctl, err := loadAcquireController(store, closing)
+		ctl, err := loadAcquireController(store, time.Second, closing)
 		assert.NilError(t, err)
 
 		// First acquisition by Alice.
@@ -782,5 +784,110 @@ func TestAcquireController(t *testing.T) {
 				},
 			},
 		}, protoCmpOpts...)
+	})
+}
+
+func TestAcquisitionController_Acquiring(t *testing.T) {
+	t.Parallel()
+
+	t.Run("Queued operation takes precedence", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			db    = openDB(t)
+			eg    errgroup.Group
+			wg    sync.WaitGroup
+			begin = make(chan struct{})
+			out   = testutil.NewSafeBuffer()
+		)
+		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
+		assert.NilError(t, err)
+		assert.NilError(t,
+			store.Put("treasure", func(r *logsv1.AcquisitionRecord, _ bool) {
+				r.Max = 20
+				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
+					{
+						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context:   callerAlice,
+						Timestamp: time.Now().UnixNano(),
+					},
+				}...)
+			}),
+		)
+
+		// The timeout of queue is 1 sec.
+		ctl, err := loadAcquireController(store, time.Hour, nil)
+		assert.NilError(t, err)
+
+		wg.Add(2)
+		eg.Go(func() error {
+			wg.Done()
+			<-begin
+
+			// Bob tries to acquire immediately.
+			err := ctl.acquire(background, "treasure", callerBob, 20, true)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "bob")
+			return ctl.release("treasure", callerBob)
+		})
+		eg.Go(func() error {
+			wg.Done()
+			<-begin
+
+			// After 100ms, Alice tries to acquire.
+			time.Sleep(time.Millisecond * 100)
+			err := ctl.acquire(background, "treasure", callerAlice, 20, true)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(out, "alice")
+			return ctl.release("treasure", callerAlice)
+		})
+		wg.Wait()
+		close(begin)
+		assert.NilError(t, eg.Wait())
+
+		assert.DeepEqual(t, out.String(), "alice\nbob\n")
+	})
+
+	t.Run("The operation that is not queued completes after timeout", func(t *testing.T) {
+		t.Parallel()
+
+		db := openDB(t)
+		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
+		assert.NilError(t, err)
+		assert.NilError(t,
+			store.Put("treasure", func(r *logsv1.AcquisitionRecord, _ bool) {
+				r.Max = 20
+				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
+					{
+						Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+						Context:   callerAlice,
+						Timestamp: time.Now().UnixNano(),
+					},
+				}...)
+			}),
+		)
+
+		start := time.Now()
+
+		// The timeout of queue is 500ms.
+		ctl, err := loadAcquireController(store, time.Millisecond*500, nil)
+		assert.NilError(t, err)
+
+		// Bob tries to acquire.
+		assert.NilError(t,
+			ctl.acquire(background, "treasure", callerBob, 20, false),
+		)
+
+		// Check if blocking has occurred until timeout.
+		elapsed := time.Since(start)
+		assert.Assert(t, elapsed > time.Millisecond*500, "%s", elapsed)
+
+		assert.NilError(t,
+			ctl.acquire(background, "treasure", callerAlice, 20, false),
+		)
 	})
 }
