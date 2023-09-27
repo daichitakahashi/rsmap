@@ -92,8 +92,9 @@ func (p *tablePrinter) insertAcquisitionLogs(resource string, r *logsv1.Acquisit
 	_ = resource
 
 	var (
-		acquired = map[string]int64{}
-		total    int64
+		acquiring = map[string]int64{}
+		acquired  = map[string]int64{}
+		total     int64
 	)
 
 	for _, l := range r.Logs {
@@ -101,11 +102,24 @@ func (p *tablePrinter) insertAcquisitionLogs(resource string, r *logsv1.Acquisit
 			data string
 			cc   = logs.CallerContext(l.Context).ShortString()
 		)
-		if l.Event == logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED {
+		switch l.Event {
+		case logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING:
+			if _, ok := acquiring[cc]; !ok {
+				acquiring[cc] = l.Timestamp
+			}
+			continue
+		case logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED:
+			var elapsed string
+			start, ok := acquiring[cc]
+			if ok {
+				delete(acquiring, cc)
+				elapsed = fmt.Sprintf(" [waited %s]", time.Duration(l.Timestamp-start))
+			}
+
 			total += l.N
 			acquired[cc] = l.N
-			data = fmt.Sprintf("+%d(%d/%d)", l.N, total, r.Max)
-		} else {
+			data = fmt.Sprintf("+%d(%d/%d)%s", l.N, total, r.Max, elapsed)
+		case logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED:
 			if n, ok := acquired[cc]; ok {
 				total -= n
 				delete(acquired, cc)
