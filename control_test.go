@@ -367,6 +367,8 @@ func TestInitController(t *testing.T) {
 			db      = openDB(t)
 			closing = make(chan struct{})
 			eg      errgroup.Group
+			wg      sync.WaitGroup
+			begin   = make(chan struct{})
 		)
 
 		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
@@ -379,7 +381,12 @@ func TestInitController(t *testing.T) {
 		try, err := ctl.tryInit(background, "treasure", callerAlice)
 		assert.NilError(t, err)
 		assert.Assert(t, try)
+
+		wg.Add(2)
 		eg.Go(func() error {
+			wg.Done()
+			<-begin
+
 			// Alice reports success of init after 200ms.
 			time.Sleep(time.Millisecond * 200)
 			return ctl.complete("treasure", callerAlice)
@@ -387,10 +394,16 @@ func TestInitController(t *testing.T) {
 
 		// "closing" occurred while Bob tries to init.
 		eg.Go(func() error {
+			wg.Done()
+			<-begin
+
 			time.Sleep(time.Millisecond * 100)
 			close(closing)
 			return nil
 		})
+
+		wg.Wait()
+		close(begin)
 
 		// Bob's try will be canceled.
 		try, err = ctl.tryInit(background, "treasure", callerBob)
@@ -732,6 +745,8 @@ func TestAcquireController(t *testing.T) {
 			db      = openDB(t)
 			closing = make(chan struct{})
 			eg      errgroup.Group
+			wg      sync.WaitGroup
+			begin   = make(chan struct{})
 		)
 		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
@@ -743,7 +758,12 @@ func TestAcquireController(t *testing.T) {
 		assert.NilError(t,
 			ctl.acquire(background, "treasure", callerAlice, 5, true),
 		)
+
+		wg.Add(2)
 		eg.Go(func() error {
+			wg.Done()
+			<-begin
+
 			// Alice releases after 200ms.
 			time.Sleep(time.Millisecond * 200)
 			return ctl.release("treasure", callerAlice)
@@ -751,10 +771,15 @@ func TestAcquireController(t *testing.T) {
 
 		// "closing" occurred while Bob tries to acquire.
 		eg.Go(func() error {
+			wg.Done()
+			<-begin
+
 			time.Sleep(time.Millisecond * 100)
 			close(closing)
 			return nil
 		})
+		wg.Wait()
+		close(begin)
 
 		// Bob's try will be canceled.
 		assert.ErrorIs(t,
@@ -763,7 +788,7 @@ func TestAcquireController(t *testing.T) {
 		)
 
 		// Release by Alice also fails.
-		assert.ErrorIs(t, eg.Wait(), errClosing)
+		assert.ErrorIs(t, eg.Wait(), errClosing) // FIXME:
 
 		// Check stored logs.
 		r, err := store.Get("treasure")
