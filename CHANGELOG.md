@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.0.2](https://github.com/daichitakahashi/rsmap/compare/v0.0.1...v0.0.2) - 2023-09-28
+- Do not (*http.Server).Shutdown() immediately by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/26
+- Check if `${rsmapDir}/logs.db` and `${rsmapDir}/addr` already exists as directory by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/29
+- Update internal/ctl: re-implement channel-based semaphore by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/30
+
 ## [v0.0.1](https://github.com/daichitakahashi/rsmap/commits/v0.0.1) - 2023-09-23
 - Reworking control core by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/1
 - Rework resource map by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/2
