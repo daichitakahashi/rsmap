@@ -12,7 +12,7 @@ import (
 func Test_Treasure(t *testing.T) {
 	t.Parallel()
 
-	for name, op := range test.Operations(3) {
+	for name, op := range test.Operations(10) {
 		op := op
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -41,28 +41,28 @@ func Test_Treasure(t *testing.T) {
 func Test_Precious(t *testing.T) {
 	t.Parallel()
 
-	// for name, op := range test.Operations(10) {
-	// 	op := op
-	// 	t.Run(name, func(t *testing.T) {
-	// 		t.Parallel()
+	for name, op := range test.Operations(10) {
+		op := op
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	// 		m, err := rsmap.New(".rsmap")
-	// 		assert.NilError(t, err)
-	// 		t.Cleanup(m.Close)
+			m, err := rsmap.New(".rsmap")
+			assert.NilError(t, err)
+			t.Cleanup(m.Close)
 
-	// 		r, err := m.Resource(test.Context(t), test.ResourcePrecious, test.Options()...)
-	// 		assert.NilError(t, err)
+			r, err := m.Resource(test.Context(t), test.ResourcePrecious, test.Options()...)
+			assert.NilError(t, err)
 
-	// 		if op == test.OpLock {
-	// 			assert.NilError(t, r.Lock(test.Context(t)))
-	// 		} else {
-	// 			assert.NilError(t, r.RLock(test.Context(t)))
-	// 		}
-	// 		t.Cleanup(func() {
-	// 			assert.NilError(t, r.UnlockAny())
-	// 		})
+			if op == test.OpLock {
+				assert.NilError(t, r.Lock(test.Context(t)))
+			} else {
+				assert.NilError(t, r.RLock(test.Context(t)))
+			}
+			t.Cleanup(func() {
+				assert.NilError(t, r.UnlockAny())
+			})
 
-	// 		test.DoSomething()
-	// 	})
-	// }
+			test.DoSomething()
+		})
+	}
 }
