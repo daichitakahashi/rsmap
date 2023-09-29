@@ -68,8 +68,6 @@ const (
 	EnvExecutionID = "RSMAP_EXECUTION_ID"
 )
 
-// ディレクトリの存在判定までやる。
-// さらに、logs.dbやaddrの名前でディレクトリが存在しないことまで確認する。
 func logsDir(base string) (string, error) {
 	if !filepath.IsAbs(base) {
 		wd, err := os.Getwd()
