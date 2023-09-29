@@ -4,17 +4,28 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
+	"gotest.tools/v3/assert"
+
 	"github.com/daichitakahashi/rsmap"
 )
 
-func Dir() string {
+func Dir(t *testing.T) string {
+	t.Helper()
+
+	wd, err := os.Getwd()
+	assert.NilError(t, err)
+
 	_, filename, _, _ := runtime.Caller(0)
 	dir := filepath.Dir(filename)
+	dir, err = filepath.Rel(wd, dir)
+	assert.NilError(t, err)
+
 	return filepath.Join(dir, ".rsmap")
 }
 
