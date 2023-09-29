@@ -4,11 +4,19 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/daichitakahashi/rsmap"
 )
+
+func Dir() string {
+	_, filename, _, _ := runtime.Caller(0)
+	dir := filepath.Dir(filename)
+	return filepath.Join(dir, ".rsmap")
+}
 
 const (
 	ResourceTreasure = "treasure"
