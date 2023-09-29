@@ -17,7 +17,7 @@ func Test_Treasure(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			m, err := rsmap.New(test.Dir())
+			m, err := rsmap.New(test.Dir(t))
 			assert.NilError(t, err)
 			t.Cleanup(m.Close)
 
@@ -46,7 +46,7 @@ func Test_Precious(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			m, err := rsmap.New(test.Dir())
+			m, err := rsmap.New(test.Dir(t))
 			assert.NilError(t, err)
 			t.Cleanup(m.Close)
 
