@@ -2,3 +2,4 @@
 .rsmap
 .cov
 coverage.out
+coverage.filtered

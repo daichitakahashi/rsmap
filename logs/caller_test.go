@@ -26,4 +26,6 @@ func TestCallers(t *testing.T) {
 	assert.NilError(t, err, "%s", err)
 	t.Logf(oneHash)
 	t.Logf(twoHash)
+
+	assert.Equal(t, c.ShortString(), fmt.Sprintf("%s->%s", oneHash, twoHash))
 }
