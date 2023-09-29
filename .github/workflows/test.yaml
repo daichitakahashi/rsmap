@@ -27,13 +27,14 @@ jobs:
         go-version: "1.21"
         check-latest: true
     - name: Test
-      run: go test -race -coverprofile coverage.out -covermode atomic ./...
+      run: go test -race -coverprofile coverage.out -coverpkg ./... -covermode atomic ./...
     - name: Generate coverage
       if: github.ref == 'refs/heads/main' && runner.os == 'Linux'
       run: |
+        cat coverage.out | grep -v ".pb.go" | grep -v ".connect.go" | grep -v "/test/" > coverage.filtered
         mkdir -p .cov
-        go tool cover -html=coverage.out -o ./.cov/coverage.html
-        go tool cover -func=coverage.out
+        go tool cover -html=coverage.filtered -o ./.cov/coverage.html
+        go tool cover -func=coverage.filtered
         export COVERAGE=$(go tool cover -func=coverage.out | tail -n 1 | awk '{print $3}')
         echo "{\
           \"schemaVersion\": 1,\
