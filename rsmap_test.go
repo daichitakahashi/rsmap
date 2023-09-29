@@ -260,8 +260,14 @@ func TestMap_Resource(t *testing.T) {
 				return m
 			}
 
-			// First try.
+			// First try(server).
 			_, err := newMap(t).Resource(background, "treasure", WithInit(func(ctx context.Context) error {
+				return errFailure
+			}))
+			assert.ErrorIs(t, err, errFailure)
+
+			// Second try(client).
+			_, err = newMap(t).Resource(background, "treasure", WithInit(func(ctx context.Context) error {
 				return errFailure
 			}))
 			assert.ErrorIs(t, err, errFailure)
