@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -61,13 +60,17 @@ func run(filename, operation, resource string, shortContext bool) error {
 		}
 	}
 
+	var resources []string
 	if resource == "" {
-		// TODO: add full list option?
-		return errors.New("resource id must be specified")
+		resources, err = allResources(db)
+		if err != nil {
+			return err
+		}
+	} else {
+		resources = []string{resource}
 	}
 
-	table := newTablePrinter(shortContext)
-
+	table := newTablePrinter(len(resources) == 1, shortContext)
 	if server {
 		store, err := logs.NewInfoStore(db)
 		if err != nil {
@@ -76,30 +79,48 @@ func run(filename, operation, resource string, shortContext bool) error {
 		table.insertServerLogs(store.ServerRecord().Logs)
 	}
 
-	if init {
-		store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
-		if err != nil {
-			return err
+	for _, resource := range resources {
+
+		if init {
+			store, err := logs.NewResourceRecordStore[logsv1.InitRecord](db)
+			if err != nil {
+				return err
+			}
+			r, err := store.Get(resource)
+			if err != nil {
+				return err
+			}
+			table.insertInitLogs(resource, r.Logs)
 		}
-		r, err := store.Get(resource)
-		if err != nil {
-			return err
+
+		if acquire {
+			store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
+			if err != nil {
+				return err
+			}
+			r, err := store.Get(resource)
+			if err != nil {
+				return err
+			}
+			table.insertAcquisitionLogs(resource, r)
 		}
-		table.insertInitLogs(resource, r.Logs)
 	}
 
-	if acquire {
-		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
-		if err != nil {
-			return err
-		}
-		r, err := store.Get(resource)
-		if err != nil {
-			return err
-		}
-		table.insertAcquisitionLogs(resource, r)
-	}
-
-	fmt.Printf("Resource identifier: %q\n\n", resource)
 	return table.print()
+}
+
+func allResources(db *bbolt.DB) ([]string, error) {
+	var resources []string
+
+	err := db.View(func(tx *bbolt.Tx) error {
+		c := tx.Bucket([]byte("init")).Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			resources = append(resources, string(k))
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resources, nil
 }

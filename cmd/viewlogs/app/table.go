@@ -20,21 +20,24 @@ import (
 type (
 	row struct {
 		ts        int64 // timestamp
+		resource  string
 		operation string
 		data      string
 		context   logs.CallerContext
 	}
 
 	tablePrinter struct {
-		shortContext bool
+		singleResource bool
+		shortContext   bool
 
 		rows []row
 	}
 )
 
-func newTablePrinter(shortContext bool) *tablePrinter {
+func newTablePrinter(singleResource, shortContext bool) *tablePrinter {
 	return &tablePrinter{
-		shortContext: shortContext,
+		singleResource: singleResource,
+		shortContext:   shortContext,
 
 		rows: []row{},
 	}
@@ -77,11 +80,10 @@ func (p *tablePrinter) insertServerLogs(sl []*logsv1.ServerLog) {
 }
 
 func (p *tablePrinter) insertInitLogs(resource string, il []*logsv1.InitLog) {
-	_ = resource
-
 	for _, l := range il {
 		p.insert(row{
 			ts:        l.Timestamp,
+			resource:  resource,
 			operation: formatInitOperation(l.Event),
 			context:   logs.CallerContext(l.Context),
 		})
@@ -89,8 +91,6 @@ func (p *tablePrinter) insertInitLogs(resource string, il []*logsv1.InitLog) {
 }
 
 func (p *tablePrinter) insertAcquisitionLogs(resource string, r *logsv1.AcquisitionRecord) {
-	_ = resource
-
 	var (
 		acquiring = map[string]int64{}
 		acquired  = map[string]int64{}
@@ -128,6 +128,7 @@ func (p *tablePrinter) insertAcquisitionLogs(resource string, r *logsv1.Acquisit
 		}
 		p.insert(row{
 			ts:        l.Timestamp,
+			resource:  resource,
 			operation: formatAcquisitionOperation(l.Event),
 			context:   logs.CallerContext(l.Context),
 			data:      data,
@@ -141,7 +142,14 @@ func (p *tablePrinter) print() error {
 		return err
 	}
 
-	tbl := table.New("Time", "Elapsed", "Operation", "Data", "Context(Map->Resource)").
+	var tbl table.Table
+	if p.singleResource {
+		tbl = table.New("Time", "Elapsed", "Operation", "Data", "Context(Map->Resource)")
+	} else {
+		tbl = table.New("Time", "Resource", "Operation", "Data", "Context(Map->Resource)")
+	}
+
+	tbl = tbl.
 		WithHeaderFormatter(
 			color.New(color.FgGreen, color.Underline).SprintfFunc(),
 		).
@@ -165,7 +173,12 @@ func (p *tablePrinter) print() error {
 		} else {
 			ctx = r.context.String()
 		}
-		tbl.AddRow(timestamp, elapsed, r.operation, r.data, ctx)
+
+		if p.singleResource {
+			tbl.AddRow(timestamp, elapsed, r.operation, r.data, ctx)
+		} else {
+			tbl.AddRow(timestamp, r.resource, r.operation, r.data, ctx)
+		}
 	}
 
 	tbl.Print()
