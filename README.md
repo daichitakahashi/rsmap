@@ -2,16 +2,20 @@
 [![Go Reference](https://pkg.go.dev/badge/github.com/daichitakahashi/rsmap.svg)](https://pkg.go.dev/github.com/daichitakahashi/rsmap)
 [![coverage](https://img.shields.io/endpoint?style=flat-square&url=https%3A%2F%2Fdaichitakahashi.github.io%2Frsmap%2Fcoverage.json)](https://daichitakahashi.github.io/rsmap/coverage.html)
 
-簡単な説明。
+`rsmap` is a package for exclusive control between parallelized `go test` processes.
 
-## 目的
-データストアに依存するアプリケーションを開発する際、データストアを操作するパッケージが複数あると、並行して実行されるテストによるデータ操作が衝突してしまうことがある。
-これを避けるためには、すべてのパッケージのテストを一つのプロセスだけで実行させるか(`go test -p=1`)、プロセスを横断した排他制御のいずれかが必要である。
+## Why?
+When developing applications that rely on a data store, multiple packages may operate on the same data store.
 
-前者はテストの実行速度を著しく損なってしまう。後者を実現するために専用のコマンド/プロセスを用意するのは、Goのポータビリティを損なう。
-これらのいずれも避けつつ、リソースを共有するテストを信頼性を損なわずに効率よく実行させたい。
+If tests for each package running in parallel or each test case performs data manipulation simultaneously, the stored data may end up in an unintended state, leading to potential test failures.
 
-## 使い方
+To avoid this, it is necessary either to run tests for all packages in a single process (go test -p=1) or to implement cross-process mutual exclusion to ensure that operations are exclusive across processes.
+
+The former option increases the time required for test execution. Using dedicated commands/processes to achieve the latter compromises Go's great virtue in portability.
+
+Efficiently executing tests that share a data store while maintaining reliability requires avoiding both of these pitfalls.
+
+## How to use
 ```go
 // ./internal/pkg/users_test.go
 var userDB *rsmap.Resource
@@ -32,7 +36,7 @@ func TestMain(m *testing.M) {
     m.Run()
 }
 
-func TestUsers(t *testing.T) {
+func TestListUsers(t *testing.T) {
     err := userDB.Lock(ctx)
     if err != nil {
         t.Fatal(err)
@@ -80,20 +84,16 @@ func TestCreateUser(t *testing.T) {
 }
 ```
 
-## 仕組み
-`rsmap.New()`は、引数で指定されたディレクトリの中にデータベースファイル([BoltDB](https://github.com/etcd-io/bbolt))を作成します。
-BoltDBのデータベースを同時にオープンできるのは一つのプロセスに限定されているため、最初にデータベースを作成/オープンしたプロセスだけが読み込み/書き込みを行うことができます。
-そしてこのデータベースを操作する権限を持った`rsmap.Map`は、排他制御を司るサーバーをバックグラウンドで起動させ、他のプロセスはクライアントとしてサーバーにロックの獲得や解放をリクエストします。
+## Mechanism
+`rsmap.New()` creates a database file ([BoltDB](https://github.com/etcd-io/bbolt)) within the directory specified as an argument. Since only one process can concurrently open a BoltDB database, the process that initially creates/opens the database has the authority to perform read and write operations.
 
-TODO: illustration
+The instance of `rsmap.Map` with permissions to manipulate this database launches a server in the background, serving as the interface for exclusive control. Other processes/instances act as clients, requesting the acquisition or release of locks from the server.
 
-テストの各プロセスは、パッケージごとのテスト用バイナリに対応します。
-これは、排他制御の中心となったプロセスも、自分のパッケージのテストがすべて終了したら速やかに終了することを意味しています。
+Each test process corresponds to a test-specific binary for a package. This means that the process at the core of exclusive control promptly terminates once all tests for its respective package have completed.
 
-データベースをオープンできずクライアントとなっていたプロセスは、データベースがオープンできるまでバックグラウンドで待機し続けています。
-これにより、サーバーを担っていたプロセスが終了すると、直ちに別のプロセスがサーバーに昇格し、他のすべてのクライアントは新しいサーバーにリクエストするようになります。
+Processes that act as clients continue to wait in the background until the database becomes available. This ensures that when the process responsible for the server terminates, another process immediately takes on the role of the server. Subsequently, all other clients start making requests to the new server.
 
-開発者は、排他制御の中心となるコマンドやプロセスに注意を払うことなく、テスト間の排他制御を行うことができます。
+Without the need for dedicated commands or processes, developers can achieve cross-process exclusive control seamlessly.
 
 ## `viewlogs`コマンドによるログの確認
 排他制御やサーバー/クライアントの切り替えの信頼性を高めるために注意を払って開発しています。
