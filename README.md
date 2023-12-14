@@ -28,7 +28,7 @@ func TestMain(m *testing.M) {
     }
     defer m.Close()
 
-    userDB, err = m.Resource(ctx, "user_db")
+    userDB, err = m.Resource(ctx, "user_db") // "user_db" is an identifier for user database
     if err != nil {
         log.Panic(err)
     }
@@ -84,7 +84,7 @@ func TestCreateUser(t *testing.T) {
 }
 ```
 
-## Mechanism
+## How it works
 `rsmap.New()` creates a database file ([BoltDB](https://github.com/etcd-io/bbolt)) within the directory specified as an argument. Since only one process can concurrently open a BoltDB database, the process that initially creates/opens the database has the authority to perform read and write operations.
 
 The instance of `rsmap.Map` with permissions to manipulate this database launches a server in the background, serving as the interface for exclusive control. Other processes/instances act as clients, requesting the acquisition or release of locks from the server.
@@ -95,19 +95,19 @@ Processes that act as clients continue to wait in the background until the datab
 
 Without the need for dedicated commands or processes, developers can achieve cross-process exclusive control seamlessly.
 
-## `viewlogs`コマンドによるログの確認
-排他制御やサーバー/クライアントの切り替えの信頼性を高めるために注意を払って開発しています。
-排他制御の状態を永続化しているデータベースファイルには、発生したイベントが記録されています。
+## View `rsmap` operation log using `viewlogs` command
+I am paying careful attention to enhance the reliability of exclusive control and the switching between server and client roles. The database file, which persists the state of exclusive control, records events that occur during the process.
 
-テストが予期しない原因によって失敗した際にこのイベントを確認することで、原因特定の助けとすることができます。
+By examining these events when a test fails due to unexpected reasons, it is possible to aid in identifying the cause. This approach contributes to troubleshooting and understanding the reasons behind unexpected test failures.
+
 ```shell
 $ go run github.com/daichitakahashi/rsmap/cmd/viewlogs YOUR_DATABASE_FILE
 ```
 
-TODO: screenshot
+![viewlogs](viewlogs.png)
 
-|オプション|短縮系|説明|
+|Option|Short|Description|
 |---|---|---|
-|`--operation`|`-o`|`server`(サーバーの起動/停止), `init`(リソースの初期化), `acquire`(ロックの獲得/解放)のうち、出力したい情報をカンマ区切りで指定する。デフォルトではすべてを表示する。|
-|`--resource`|`-r`|ログを出力するリソースを指定する。デフォルトではすべてのリソースのログを出力する。|
-|`--short`|`-s`|ログのコンテクスト（各関数/メソッドをコールされた場所）の出力を省略し、ハッシュのみとする。|
+|`--operation`|`-o`|Specify the desired information to output, comma-separated, among `server` (start/stop server), `init` (initialize resources), `acquire` (acquire/release locks). By default, it displays all information.|
+|`--resource`|`-r`|Specify the resource for which logs should be output. By default, it outputs logs for all resources.|
+|`--short`|`-s`|Omit the output of log context (location where each function/method was called) and display only the hash.|
