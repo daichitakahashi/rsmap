@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -51,17 +52,7 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("WithRetryPolicy and WithHTTPClient", func(t *testing.T) {
-		t.Parallel()
-
-		// Set executionID manually.
-		const executionID = "0"
-		assert.NilError(t, os.Setenv(EnvExecutionID, executionID))
-
-		var (
-			base      = t.TempDir()
-			actualDir = filepath.Join(base, executionID)
-		)
-		assert.NilError(t, os.MkdirAll(actualDir, 0755))
+		base := t.TempDir()
 
 		// Create dummy Map for preventing server mode.
 		func() {
@@ -100,29 +91,23 @@ func TestNew(t *testing.T) {
 }
 
 func TestNew_FilesExistAsDirectory(t *testing.T) {
-	t.Parallel()
-
 	t.Run("logs.db", func(t *testing.T) {
-		t.Parallel()
-
-		assert.NilError(t, os.Setenv(EnvExecutionID, "0"))
+		t.Setenv(EnvExecutionID, "fixed")
 		dir := t.TempDir()
 
 		// Create logs.db as a directory.
-		assert.NilError(t, os.MkdirAll(filepath.Join(dir, "0", "logs.db"), 0755))
+		assert.NilError(t, os.MkdirAll(filepath.Join(dir, "fixed", "logs.db"), 0755))
 
 		_, err := New(dir)
 		assert.Assert(t, err != nil)
 	})
 
 	t.Run("addr", func(t *testing.T) {
-		t.Parallel()
-
-		assert.NilError(t, os.Setenv(EnvExecutionID, "0"))
+		t.Setenv(EnvExecutionID, "fixed")
 		dir := t.TempDir()
 
-		// Create logs.db as a directory.
-		assert.NilError(t, os.MkdirAll(filepath.Join(dir, "0", "addr"), 0755))
+		// Create addr as a directory.
+		assert.NilError(t, os.MkdirAll(filepath.Join(dir, "fixed", "addr"), 0755))
 
 		_, err := New(dir)
 		assert.Assert(t, err != nil)
@@ -319,4 +304,74 @@ func TestMap_Resource(t *testing.T) {
 			assert.Assert(t, succeeded)
 		})
 	})
+}
+
+func TestLockMultipleResources_Deadlock(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	testFunc := func(fn func(ctx context.Context, treasure, precious *Resource)) func(context.Context) {
+		ctx := context.Background()
+		m, err := New(dir)
+		assert.NilError(t, err)
+		t.Cleanup(m.Close)
+
+		treasure, err := m.Resource(ctx, "treasure")
+		assert.NilError(t, err)
+		precious, err := m.Resource(ctx, "precious")
+		assert.NilError(t, err)
+
+		return func(ctx context.Context) {
+			fn(ctx, treasure, precious)
+		}
+	}
+
+	stepOne := make(chan struct{})
+	stepTwo := make(chan struct{})
+
+	// Pseudo test function "TestA" and "TestB".
+	// Both test uses "treasure" and "precious", but use Lock() in different order.
+	// Ensure that this causes deadlock.
+	TestA := testFunc(func(ctx context.Context, treasure, precious *Resource) {
+		err := treasure.Lock(ctx)
+		assert.NilError(t, err)
+
+		close(stepOne)
+		<-stepTwo
+
+		err = precious.Lock(ctx)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	// TestB
+	TestB := testFunc(func(ctx context.Context, treasure, precious *Resource) {
+		<-stepOne
+
+		err := precious.Lock(ctx)
+		assert.NilError(t, err)
+
+		close(stepTwo)
+
+		err = treasure.Lock(ctx)
+		assert.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+
+	// Run TestA and TestB.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		TestA(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		TestB(ctx)
+	}()
+
+	wg.Wait()
 }
