@@ -95,7 +95,7 @@ func logsDir(base string) (string, error) {
 		return "", fmt.Errorf("addr already exists as a directory: %s", addrFilename)
 	}
 
-	return filepath.Join(base, executionID), nil
+	return dir, nil
 }
 
 // New creates an instance of [Map] that enables us to reuse external resources with thread safety.
