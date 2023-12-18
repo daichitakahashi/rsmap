@@ -71,7 +71,7 @@ func (s *InfoStore) PutServerLog(l *logsv1.ServerLog) error {
 type (
 	ResourceRecordStore[T any] interface {
 		Get(identifier string) (*T, error)
-		Put(identifier string, update func(r *T, update bool)) error
+		Put(identifiers []string, update func(identifier string, r *T, update bool)) error
 		ForEach(fn func(identifier string, record *T) error) error
 	}
 
@@ -130,31 +130,37 @@ func (s *recordStore[T, P]) Get(identifier string) (*T, error) {
 	return r, nil
 }
 
-func (s *recordStore[T, P]) Put(identifier string, fn func(r *T, update bool)) error {
+func (s *recordStore[T, P]) Put(identifiers []string, fn func(identifier string, r *T, update bool)) error {
 	return s._db.Update(func(tx *bbolt.Tx) error {
-		var (
-			b   = tx.Bucket(s._bucketName)
-			key = []byte(identifier)
-		)
+		for _, identifier := range identifiers {
+			var (
+				b   = tx.Bucket(s._bucketName)
+				key = []byte(identifier)
+			)
 
-		var (
-			r      P = new(T)
-			update bool
-		)
-		data := b.Get(key)
-		if data != nil {
-			update = true
-			if err := proto.Unmarshal(data, r); err != nil {
+			var (
+				r      P = new(T)
+				update bool
+			)
+			data := b.Get(key)
+			if data != nil {
+				update = true
+				if err := proto.Unmarshal(data, r); err != nil {
+					return err
+				}
+			}
+
+			fn(identifier, r, update)
+			newData, err := proto.Marshal(r)
+			if err != nil {
+				return err
+			}
+			err = b.Put(key, newData)
+			if err != nil {
 				return err
 			}
 		}
-
-		fn(r, update)
-		newData, err := proto.Marshal(r)
-		if err != nil {
-			return err
-		}
-		return b.Put(key, newData)
+		return nil
 	})
 }
 

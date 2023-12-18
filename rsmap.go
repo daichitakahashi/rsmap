@@ -415,15 +415,15 @@ func (m *serverSideMap) acquire(ctx context.Context, resourceName string, operat
 }
 
 func (m *serverSideMap) acquireMulti(ctx context.Context, resources []*resource_mapv1.AcquireMultiEntry) error {
-	return nil // TODO:
+	return m._acquire.acquireMulti(ctx, resources)
 }
 
 func (m *serverSideMap) release(_ context.Context, resourceName string, operator logs.CallerContext) error {
 	return m._acquire.release(resourceName, operator)
 }
 
-func (m *serverSideMap) releaseMulti(ctx context.Context, resources []*resource_mapv1.ReleaseMultiEntry) error {
-	return nil // TODO:
+func (m *serverSideMap) releaseMulti(_ context.Context, resources []*resource_mapv1.ReleaseMultiEntry) error {
+	return m._acquire.releaseMulti(resources)
 }
 
 var _ resourceMap = (*serverSideMap)(nil)

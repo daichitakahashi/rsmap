@@ -170,7 +170,7 @@ func TestResourceRecordStore(t *testing.T) {
 
 	// Store record.
 	assert.NilError(t,
-		store.Put("treasure", func(r *logsv1.InitRecord, update bool) {
+		store.Put([]string{"treasure"}, func(_ string, r *logsv1.InitRecord, update bool) {
 			// This is a new record.
 			assert.Assert(t, !update)
 
@@ -218,7 +218,7 @@ func TestResourceRecordStore(t *testing.T) {
 	}, ignoreProtoUnexported)
 
 	// Store another record.
-	assert.NilError(t, store.Put("precious", func(r *logsv1.InitRecord, update bool) {
+	assert.NilError(t, store.Put([]string{"precious"}, func(_ string, r *logsv1.InitRecord, update bool) {
 		assert.Assert(t, !update)
 
 		r.Logs = append(r.Logs, &logsv1.InitLog{
@@ -238,7 +238,7 @@ func TestResourceRecordStore(t *testing.T) {
 			Timestamp: 1694765621790751000,
 		})
 	}))
-	assert.NilError(t, store.Put("precious", func(r *logsv1.InitRecord, update bool) {
+	assert.NilError(t, store.Put([]string{"precious"}, func(_ string, r *logsv1.InitRecord, update bool) {
 		// Update record.
 		assert.Assert(t, update)
 
