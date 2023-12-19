@@ -1,5 +1,8 @@
 # Changelog
 
+## [v0.0.4](https://github.com/daichitakahashi/rsmap/compare/v0.0.3...v0.0.4) - 2023-12-19
+- Implement multiple resource lock by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/50
+
 ## [v0.0.3](https://github.com/daichitakahashi/rsmap/compare/v0.0.2...v0.0.3) - 2023-12-14
 - Get expected coverage by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/31
 - Update workflows/test.yaml: fix coverage extraction by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/33
