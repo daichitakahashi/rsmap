@@ -44,7 +44,7 @@ jobs:
         }" > ./.cov/coverage.json
     - name: Upload coverage
       if: github.ref == 'refs/heads/main' && runner.os == 'Linux'
-      uses: actions/upload-pages-artifact@v2
+      uses: actions/upload-pages-artifact@v3
       with:
         path: './.cov'
         retention-days: "7"
