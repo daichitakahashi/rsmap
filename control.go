@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/daichitakahashi/oncewait"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/daichitakahashi/rsmap/internal/ctl"
 	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
+	resource_mapv1 "github.com/daichitakahashi/rsmap/internal/proto/resource_map/v1"
 	"github.com/daichitakahashi/rsmap/internal/rendezvous"
 	"github.com/daichitakahashi/rsmap/logs"
 )
@@ -77,7 +79,7 @@ func (c *initController) tryInit(ctx context.Context, resourceName string, opera
 
 	if result.Initiated {
 		// Update data on key value store.
-		err := c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
+		err := c._store.Put([]string{resourceName}, func(_ string, r *logsv1.InitRecord, _ bool) {
 			r.Logs = append(r.Logs, &logsv1.InitLog{
 				Event:     logsv1.InitEvent_INIT_EVENT_STARTED,
 				Context:   operator,
@@ -109,7 +111,7 @@ func (c *initController) complete(resourceName string, operator logs.CallerConte
 		return err
 	}
 
-	return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
+	return c._store.Put([]string{resourceName}, func(_ string, r *logsv1.InitRecord, _ bool) {
 		r.Logs = append(r.Logs, &logsv1.InitLog{
 			Event:     logsv1.InitEvent_INIT_EVENT_COMPLETED,
 			Context:   operator,
@@ -136,7 +138,7 @@ func (c *initController) fail(resourceName string, operator logs.CallerContext) 
 		return err
 	}
 
-	return c._store.Put(resourceName, func(r *logsv1.InitRecord, _ bool) {
+	return c._store.Put([]string{resourceName}, func(_ string, r *logsv1.InitRecord, _ bool) {
 		r.Logs = append(r.Logs, &logsv1.InitLog{
 			Event:     logsv1.InitEvent_INIT_EVENT_FAILED,
 			Context:   operator,
@@ -151,6 +153,7 @@ type (
 		_kv        logs.ResourceRecordStore[logsv1.AcquisitionRecord]
 		_resources sync.Map
 		_closing   <-chan struct{}
+		_multiMu   sync.Mutex
 	}
 
 	resource struct {
@@ -250,7 +253,7 @@ func (c *acquireController) acquire(ctx context.Context, resourceName string, op
 	}
 
 	// Append log "acquiring".
-	err := c._kv.Put(resourceName, func(r *logsv1.AcquisitionRecord, update bool) {
+	err := c._kv.Put([]string{resourceName}, func(_ string, r *logsv1.AcquisitionRecord, update bool) {
 		// Initial acquisition.
 		if !update {
 			r.Max = max
@@ -275,7 +278,7 @@ func (c *acquireController) acquire(ctx context.Context, resourceName string, op
 		}
 	}
 
-	return c._kv.Put(resourceName, func(r *logsv1.AcquisitionRecord, update bool) {
+	return c._kv.Put([]string{resourceName}, func(_ string, r *logsv1.AcquisitionRecord, update bool) {
 		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
 			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
 			N:         result.Acquired,
@@ -283,6 +286,92 @@ func (c *acquireController) acquire(ctx context.Context, resourceName string, op
 			Timestamp: time.Now().UnixNano(),
 		})
 	})
+}
+
+func (c *acquireController) acquireMulti(ctx context.Context, resources []*resource_mapv1.AcquireMultiEntry) error {
+	select {
+	case <-c._closing:
+		return errClosing
+	default:
+	}
+
+	type acquiringEntry struct {
+		entry    *resource_mapv1.AcquireMultiEntry
+		acquired <-chan ctl.AcquisitionResult
+	}
+	identifiers := make([]string, 0, len(resources))
+	entries := make(map[string]acquiringEntry, len(resources))
+
+	// Lock for multiple locking.
+	c._multiMu.Lock()
+	for _, entry := range resources {
+		v, _ := c._resources.LoadOrStore(entry.ResourceName, &resource{
+			once: oncewait.New(),
+		})
+		r := v.(*resource).init(entry.MaxParallelism)
+
+		// Start acquisition.
+		acCh, acquiring := r.acquire(ctx, logs.CallerContext(entry.Context).String(), entry.Exclusive)
+		// Due to trial of consecutive acquisition, not acquired.
+		if acquiring {
+			identifiers = append(identifiers, entry.ResourceName)
+			entries[entry.ResourceName] = acquiringEntry{
+				entry:    entry,
+				acquired: acCh,
+			}
+		}
+	}
+	c._multiMu.Unlock()
+	if len(identifiers) == 0 {
+		return nil
+	}
+
+	// Append log "acquiring".
+	ts := time.Now().UnixNano()
+	err := c._kv.Put(identifiers, func(identifier string, r *logsv1.AcquisitionRecord, update bool) {
+		e := entries[identifier]
+
+		// Initial acquisition.
+		if !update {
+			r.Max = e.entry.MaxParallelism
+		}
+		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
+			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRING,
+			Context:   e.entry.Context,
+			Timestamp: ts,
+		})
+	})
+	if err != nil {
+		return err
+	}
+
+	eg, _ := errgroup.WithContext(ctx)
+
+	for _, entry := range entries {
+		e := entry
+		eg.Go(func() error {
+			var result ctl.AcquisitionResult
+			select {
+			case <-c._closing:
+				return errClosing
+			case result = <-e.acquired:
+				if result.Err != nil {
+					return err
+				}
+			}
+
+			return c._kv.Put([]string{e.entry.ResourceName}, func(identifier string, r *logsv1.AcquisitionRecord, update bool) {
+				r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
+					Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_ACQUIRED,
+					N:         result.Acquired,
+					Context:   e.entry.Context,
+					Timestamp: time.Now().UnixNano(),
+				})
+			})
+		})
+	}
+
+	return eg.Wait()
 }
 
 func (c *acquireController) release(resourceName string, operator logs.CallerContext) error {
@@ -297,18 +386,67 @@ func (c *acquireController) release(resourceName string, operator logs.CallerCon
 		// If the resource not found, return without error.
 		return nil
 	}
+	op := operator.String()
 	r := v.(*resource)
-	if released := r.ctl.Release(operator.String()); !released {
+	if !r.ctl.Acquired(op) {
 		// If not acquired, return without error.
 		return nil
 	}
 
-	return c._kv.Put(resourceName, func(r *logsv1.AcquisitionRecord, _ bool) {
+	err := c._kv.Put([]string{resourceName}, func(_ string, r *logsv1.AcquisitionRecord, _ bool) {
 		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
 			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 			N:         0,
 			Context:   operator,
 			Timestamp: time.Now().UnixNano(),
+		})
+	})
+	if err != nil {
+		return err
+	}
+
+	r.ctl.Release(op)
+	return nil
+}
+
+func (c *acquireController) releaseMulti(resources []*resource_mapv1.ReleaseMultiEntry) error {
+	select {
+	case <-c._closing:
+		return errClosing
+	default:
+	}
+
+	entries := make(map[string]*resource_mapv1.ReleaseMultiEntry, len(resources))
+	identifiers := make([]string, 0, len(resources))
+
+	for _, entry := range resources {
+		v, found := c._resources.Load(entry.ResourceName)
+		if !found {
+			// If the resource not found, skip it.
+			continue
+		}
+		r := v.(*resource)
+		op := logs.CallerContext(entry.Context).String()
+		if !r.ctl.Acquired(op) {
+			// If not acquired, skip it.
+			continue
+		}
+		entries[entry.ResourceName] = entry
+		identifiers = append(identifiers, entry.ResourceName)
+
+		// Release after log write.
+		defer r.ctl.Release(op)
+	}
+
+	ts := time.Now().UnixNano()
+	return c._kv.Put(identifiers, func(identifier string, r *logsv1.AcquisitionRecord, _ bool) {
+		e := entries[identifier]
+
+		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
+			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
+			N:         0,
+			Context:   e.Context,
+			Timestamp: ts,
 		})
 	})
 }

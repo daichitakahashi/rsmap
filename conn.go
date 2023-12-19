@@ -198,12 +198,28 @@ func (h *resourceMapHandler) Acquire(ctx context.Context, req *connect_go.Reques
 	return connect_go.NewResponse(&resource_mapv1.AcquireResponse{}), nil
 }
 
+func (h *resourceMapHandler) AcquireMulti(ctx context.Context, req *connect_go.Request[resource_mapv1.AcquireMultiRequest]) (*connect_go.Response[resource_mapv1.AcquireMultiResponse], error) {
+	err := h._rm.acquireMulti(ctx, req.Msg.Resources)
+	if err != nil {
+		return nil, err
+	}
+	return connect_go.NewResponse(&resource_mapv1.AcquireMultiResponse{}), nil
+}
+
 func (h *resourceMapHandler) Release(ctx context.Context, req *connect_go.Request[resource_mapv1.ReleaseRequest]) (*connect_go.Response[resource_mapv1.ReleaseResponse], error) {
 	err := h._rm.release(ctx, req.Msg.ResourceName, logs.CallerContext(req.Msg.Context))
 	if err != nil {
 		return nil, err
 	}
 	return connect_go.NewResponse(&resource_mapv1.ReleaseResponse{}), nil
+}
+
+func (h *resourceMapHandler) ReleaseMulti(ctx context.Context, req *connect_go.Request[resource_mapv1.ReleaseMultiRequest]) (*connect_go.Response[resource_mapv1.ReleaseMultiResponse], error) {
+	err := h._rm.releaseMulti(ctx, req.Msg.Resources)
+	if err != nil {
+		return nil, err
+	}
+	return connect_go.NewResponse(&resource_mapv1.ReleaseMultiResponse{}), nil
 }
 
 var _ resource_mapv1connect.ResourceMapServiceHandler = (*resourceMapHandler)(nil)
@@ -304,12 +320,34 @@ func (m *clientSideMap) acquire(ctx context.Context, resourceName string, operat
 	})
 }
 
+func (m *clientSideMap) acquireMulti(ctx context.Context, resources []*resource_mapv1.AcquireMultiEntry) error {
+	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
+
+		_, err := cli.AcquireMulti(ctx, connect_go.NewRequest(&resource_mapv1.AcquireMultiRequest{
+			Resources: resources,
+		}))
+
+		return err
+	})
+}
+
 func (m *clientSideMap) release(ctx context.Context, resourceName string, operator logs.CallerContext) error {
 	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
 
 		_, err := cli.Release(ctx, connect_go.NewRequest(&resource_mapv1.ReleaseRequest{
 			ResourceName: resourceName,
 			Context:      operator,
+		}))
+
+		return err
+	})
+}
+
+func (m *clientSideMap) releaseMulti(ctx context.Context, resources []*resource_mapv1.ReleaseMultiEntry) error {
+	return m.try(ctx, func(ctx context.Context, cli resource_mapv1connect.ResourceMapServiceClient) error {
+
+		_, err := cli.ReleaseMulti(ctx, connect_go.NewRequest(&resource_mapv1.ReleaseMultiRequest{
+			Resources: resources,
 		}))
 
 		return err

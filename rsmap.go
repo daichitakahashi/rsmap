@@ -17,6 +17,7 @@ import (
 	"go.etcd.io/bbolt"
 
 	logsv1 "github.com/daichitakahashi/rsmap/internal/proto/logs/v1"
+	resource_mapv1 "github.com/daichitakahashi/rsmap/internal/proto/resource_map/v1"
 	"github.com/daichitakahashi/rsmap/logs"
 )
 
@@ -95,7 +96,7 @@ func logsDir(base string) (string, error) {
 		return "", fmt.Errorf("addr already exists as a directory: %s", addrFilename)
 	}
 
-	return filepath.Join(base, executionID), nil
+	return dir, nil
 }
 
 // New creates an instance of [Map] that enables us to reuse external resources with thread safety.
@@ -297,13 +298,72 @@ func (r *Resource) UnlockAny() error {
 	return r._m.resourceMap().release(context.Background(), r._name, r._callers)
 }
 
+type ResourceLocker struct {
+	_r         *Resource
+	_exclusive bool
+}
+
+// EXclusive returns ResourceLocker for Resource.
+func (r *Resource) Exclusive() *ResourceLocker {
+	return &ResourceLocker{
+		_r:         r,
+		_exclusive: true,
+	}
+}
+
+// Shared returns ResourceLocker for Resource.
+func (r *Resource) Shared() *ResourceLocker {
+	return &ResourceLocker{
+		_r:         r,
+		_exclusive: false,
+	}
+}
+
+// LockResources acquires exclusive/shared locks for multiple resources.
+// Returned function releases all locks acquired.
+func LockResources(ctx context.Context, resources ...*ResourceLocker) (func() error, error) {
+	var m resourceMap
+	acquireEntries := make([]*resource_mapv1.AcquireMultiEntry, 0, len(resources))
+	releaseEntries := make([]*resource_mapv1.ReleaseMultiEntry, 0, len(resources))
+
+	for _, r := range resources {
+		mm := r._r._m.resourceMap()
+		if m == nil {
+			m = mm
+		} else if m != mm {
+			return nil, errors.New("rsmap: all ResourceLocker must be derived from same Map")
+		}
+
+		acquireEntries = append(acquireEntries, &resource_mapv1.AcquireMultiEntry{
+			ResourceName:   r._r._name,
+			Context:        r._r._callers,
+			MaxParallelism: r._r._max,
+			Exclusive:      r._exclusive,
+		})
+		releaseEntries = append(releaseEntries, &resource_mapv1.ReleaseMultiEntry{
+			ResourceName: r._r._name,
+			Context:      r._r._callers,
+		})
+	}
+	err := m.acquireMulti(ctx, acquireEntries)
+	if err != nil {
+		return nil, err
+	}
+
+	return func() error {
+		return m.releaseMulti(context.Background(), releaseEntries)
+	}, nil
+}
+
 // Core interface for control operations for both server and client side.
 type resourceMap interface {
 	tryInit(ctx context.Context, resourceName string, operator logs.CallerContext) (bool, error)
 	completeInit(ctx context.Context, resourceName string, operator logs.CallerContext) error
 	failInit(ctx context.Context, resourceName string, operator logs.CallerContext) error
 	acquire(ctx context.Context, resourceName string, operator logs.CallerContext, max int64, exclusive bool) error
+	acquireMulti(ctx context.Context, resources []*resource_mapv1.AcquireMultiEntry) error
 	release(ctx context.Context, resourceName string, operator logs.CallerContext) error
+	releaseMulti(ctx context.Context, resources []*resource_mapv1.ReleaseMultiEntry) error
 }
 
 type serverSideMap struct {
@@ -354,8 +414,16 @@ func (m *serverSideMap) acquire(ctx context.Context, resourceName string, operat
 	return m._acquire.acquire(ctx, resourceName, operator, max, exclusive)
 }
 
+func (m *serverSideMap) acquireMulti(ctx context.Context, resources []*resource_mapv1.AcquireMultiEntry) error {
+	return m._acquire.acquireMulti(ctx, resources)
+}
+
 func (m *serverSideMap) release(_ context.Context, resourceName string, operator logs.CallerContext) error {
 	return m._acquire.release(resourceName, operator)
+}
+
+func (m *serverSideMap) releaseMulti(_ context.Context, resources []*resource_mapv1.ReleaseMultiEntry) error {
+	return m._acquire.releaseMulti(resources)
 }
 
 var _ resourceMap = (*serverSideMap)(nil)

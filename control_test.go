@@ -260,7 +260,7 @@ func TestInitController(t *testing.T) {
 
 		// Setup situation that init has already started.
 		assert.NilError(t,
-			store.Put("treasure", func(r *logsv1.InitRecord, _ bool) {
+			store.Put([]string{"treasure"}, func(_ string, r *logsv1.InitRecord, _ bool) {
 				r.Logs = append(r.Logs, &logsv1.InitLog{
 					Event:     logsv1.InitEvent_INIT_EVENT_STARTED,
 					Context:   callerAlice,
@@ -312,7 +312,7 @@ func TestInitController(t *testing.T) {
 
 		// Setup situation that init has already completed.
 		assert.NilError(t,
-			store.Put("treasure", func(r *logsv1.InitRecord, _ bool) {
+			store.Put([]string{"treasure"}, func(_ string, r *logsv1.InitRecord, _ bool) {
 				r.Logs = append(r.Logs, []*logsv1.InitLog{
 					{
 						Event:     logsv1.InitEvent_INIT_EVENT_STARTED,
@@ -577,7 +577,7 @@ func TestAcquireController(t *testing.T) {
 
 		// Set up acquisition status.
 		assert.NilError(t,
-			store.Put("treasure", func(r *logsv1.AcquisitionRecord, _ bool) {
+			store.Put([]string{"treasure"}, func(_ string, r *logsv1.AcquisitionRecord, _ bool) {
 				r.Max = 10
 				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
 					{
@@ -607,7 +607,7 @@ func TestAcquireController(t *testing.T) {
 			}),
 		)
 		assert.NilError(t,
-			store.Put("precious", func(r *logsv1.AcquisitionRecord, _ bool) {
+			store.Put([]string{"precious"}, func(_ string, r *logsv1.AcquisitionRecord, _ bool) {
 				r.Max = 200
 				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
 					{
@@ -828,7 +828,7 @@ func TestAcquisitionController_Acquiring(t *testing.T) {
 		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 		assert.NilError(t,
-			store.Put("treasure", func(r *logsv1.AcquisitionRecord, _ bool) {
+			store.Put([]string{"treasure"}, func(_ string, r *logsv1.AcquisitionRecord, _ bool) {
 				r.Max = 20
 				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
 					{
@@ -884,7 +884,7 @@ func TestAcquisitionController_Acquiring(t *testing.T) {
 		store, err := logs.NewResourceRecordStore[logsv1.AcquisitionRecord](db)
 		assert.NilError(t, err)
 		assert.NilError(t,
-			store.Put("treasure", func(r *logsv1.AcquisitionRecord, _ bool) {
+			store.Put([]string{"treasure"}, func(_ string, r *logsv1.AcquisitionRecord, _ bool) {
 				r.Max = 20
 				r.Logs = append(r.Logs, []*logsv1.AcquisitionLog{
 					{

@@ -45,9 +45,15 @@ const (
 	// ResourceMapServiceAcquireProcedure is the fully-qualified name of the ResourceMapService's
 	// Acquire RPC.
 	ResourceMapServiceAcquireProcedure = "/internal.proto.resource_map.v1.ResourceMapService/Acquire"
+	// ResourceMapServiceAcquireMultiProcedure is the fully-qualified name of the ResourceMapService's
+	// AcquireMulti RPC.
+	ResourceMapServiceAcquireMultiProcedure = "/internal.proto.resource_map.v1.ResourceMapService/AcquireMulti"
 	// ResourceMapServiceReleaseProcedure is the fully-qualified name of the ResourceMapService's
 	// Release RPC.
 	ResourceMapServiceReleaseProcedure = "/internal.proto.resource_map.v1.ResourceMapService/Release"
+	// ResourceMapServiceReleaseMultiProcedure is the fully-qualified name of the ResourceMapService's
+	// ReleaseMulti RPC.
+	ResourceMapServiceReleaseMultiProcedure = "/internal.proto.resource_map.v1.ResourceMapService/ReleaseMulti"
 )
 
 // ResourceMapServiceClient is a client for the internal.proto.resource_map.v1.ResourceMapService
@@ -57,7 +63,9 @@ type ResourceMapServiceClient interface {
 	CompleteInitResource(context.Context, *connect_go.Request[v1.CompleteInitResourceRequest]) (*connect_go.Response[v1.CompleteInitResourceResponse], error)
 	FailInitResource(context.Context, *connect_go.Request[v1.FailInitResourceRequest]) (*connect_go.Response[v1.FailInitResourceResponse], error)
 	Acquire(context.Context, *connect_go.Request[v1.AcquireRequest]) (*connect_go.Response[v1.AcquireResponse], error)
+	AcquireMulti(context.Context, *connect_go.Request[v1.AcquireMultiRequest]) (*connect_go.Response[v1.AcquireMultiResponse], error)
 	Release(context.Context, *connect_go.Request[v1.ReleaseRequest]) (*connect_go.Response[v1.ReleaseResponse], error)
+	ReleaseMulti(context.Context, *connect_go.Request[v1.ReleaseMultiRequest]) (*connect_go.Response[v1.ReleaseMultiResponse], error)
 }
 
 // NewResourceMapServiceClient constructs a client for the
@@ -91,9 +99,19 @@ func NewResourceMapServiceClient(httpClient connect_go.HTTPClient, baseURL strin
 			baseURL+ResourceMapServiceAcquireProcedure,
 			opts...,
 		),
+		acquireMulti: connect_go.NewClient[v1.AcquireMultiRequest, v1.AcquireMultiResponse](
+			httpClient,
+			baseURL+ResourceMapServiceAcquireMultiProcedure,
+			opts...,
+		),
 		release: connect_go.NewClient[v1.ReleaseRequest, v1.ReleaseResponse](
 			httpClient,
 			baseURL+ResourceMapServiceReleaseProcedure,
+			opts...,
+		),
+		releaseMulti: connect_go.NewClient[v1.ReleaseMultiRequest, v1.ReleaseMultiResponse](
+			httpClient,
+			baseURL+ResourceMapServiceReleaseMultiProcedure,
 			opts...,
 		),
 	}
@@ -105,7 +123,9 @@ type resourceMapServiceClient struct {
 	completeInitResource *connect_go.Client[v1.CompleteInitResourceRequest, v1.CompleteInitResourceResponse]
 	failInitResource     *connect_go.Client[v1.FailInitResourceRequest, v1.FailInitResourceResponse]
 	acquire              *connect_go.Client[v1.AcquireRequest, v1.AcquireResponse]
+	acquireMulti         *connect_go.Client[v1.AcquireMultiRequest, v1.AcquireMultiResponse]
 	release              *connect_go.Client[v1.ReleaseRequest, v1.ReleaseResponse]
+	releaseMulti         *connect_go.Client[v1.ReleaseMultiRequest, v1.ReleaseMultiResponse]
 }
 
 // TryInitResource calls internal.proto.resource_map.v1.ResourceMapService.TryInitResource.
@@ -129,9 +149,19 @@ func (c *resourceMapServiceClient) Acquire(ctx context.Context, req *connect_go.
 	return c.acquire.CallUnary(ctx, req)
 }
 
+// AcquireMulti calls internal.proto.resource_map.v1.ResourceMapService.AcquireMulti.
+func (c *resourceMapServiceClient) AcquireMulti(ctx context.Context, req *connect_go.Request[v1.AcquireMultiRequest]) (*connect_go.Response[v1.AcquireMultiResponse], error) {
+	return c.acquireMulti.CallUnary(ctx, req)
+}
+
 // Release calls internal.proto.resource_map.v1.ResourceMapService.Release.
 func (c *resourceMapServiceClient) Release(ctx context.Context, req *connect_go.Request[v1.ReleaseRequest]) (*connect_go.Response[v1.ReleaseResponse], error) {
 	return c.release.CallUnary(ctx, req)
+}
+
+// ReleaseMulti calls internal.proto.resource_map.v1.ResourceMapService.ReleaseMulti.
+func (c *resourceMapServiceClient) ReleaseMulti(ctx context.Context, req *connect_go.Request[v1.ReleaseMultiRequest]) (*connect_go.Response[v1.ReleaseMultiResponse], error) {
+	return c.releaseMulti.CallUnary(ctx, req)
 }
 
 // ResourceMapServiceHandler is an implementation of the
@@ -141,7 +171,9 @@ type ResourceMapServiceHandler interface {
 	CompleteInitResource(context.Context, *connect_go.Request[v1.CompleteInitResourceRequest]) (*connect_go.Response[v1.CompleteInitResourceResponse], error)
 	FailInitResource(context.Context, *connect_go.Request[v1.FailInitResourceRequest]) (*connect_go.Response[v1.FailInitResourceResponse], error)
 	Acquire(context.Context, *connect_go.Request[v1.AcquireRequest]) (*connect_go.Response[v1.AcquireResponse], error)
+	AcquireMulti(context.Context, *connect_go.Request[v1.AcquireMultiRequest]) (*connect_go.Response[v1.AcquireMultiResponse], error)
 	Release(context.Context, *connect_go.Request[v1.ReleaseRequest]) (*connect_go.Response[v1.ReleaseResponse], error)
+	ReleaseMulti(context.Context, *connect_go.Request[v1.ReleaseMultiRequest]) (*connect_go.Response[v1.ReleaseMultiResponse], error)
 }
 
 // NewResourceMapServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -170,9 +202,19 @@ func NewResourceMapServiceHandler(svc ResourceMapServiceHandler, opts ...connect
 		svc.Acquire,
 		opts...,
 	)
+	resourceMapServiceAcquireMultiHandler := connect_go.NewUnaryHandler(
+		ResourceMapServiceAcquireMultiProcedure,
+		svc.AcquireMulti,
+		opts...,
+	)
 	resourceMapServiceReleaseHandler := connect_go.NewUnaryHandler(
 		ResourceMapServiceReleaseProcedure,
 		svc.Release,
+		opts...,
+	)
+	resourceMapServiceReleaseMultiHandler := connect_go.NewUnaryHandler(
+		ResourceMapServiceReleaseMultiProcedure,
+		svc.ReleaseMulti,
 		opts...,
 	)
 	return "/internal.proto.resource_map.v1.ResourceMapService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -185,8 +227,12 @@ func NewResourceMapServiceHandler(svc ResourceMapServiceHandler, opts ...connect
 			resourceMapServiceFailInitResourceHandler.ServeHTTP(w, r)
 		case ResourceMapServiceAcquireProcedure:
 			resourceMapServiceAcquireHandler.ServeHTTP(w, r)
+		case ResourceMapServiceAcquireMultiProcedure:
+			resourceMapServiceAcquireMultiHandler.ServeHTTP(w, r)
 		case ResourceMapServiceReleaseProcedure:
 			resourceMapServiceReleaseHandler.ServeHTTP(w, r)
+		case ResourceMapServiceReleaseMultiProcedure:
+			resourceMapServiceReleaseMultiHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -212,6 +258,14 @@ func (UnimplementedResourceMapServiceHandler) Acquire(context.Context, *connect_
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("internal.proto.resource_map.v1.ResourceMapService.Acquire is not implemented"))
 }
 
+func (UnimplementedResourceMapServiceHandler) AcquireMulti(context.Context, *connect_go.Request[v1.AcquireMultiRequest]) (*connect_go.Response[v1.AcquireMultiResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("internal.proto.resource_map.v1.ResourceMapService.AcquireMulti is not implemented"))
+}
+
 func (UnimplementedResourceMapServiceHandler) Release(context.Context, *connect_go.Request[v1.ReleaseRequest]) (*connect_go.Response[v1.ReleaseResponse], error) {
 	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("internal.proto.resource_map.v1.ResourceMapService.Release is not implemented"))
+}
+
+func (UnimplementedResourceMapServiceHandler) ReleaseMulti(context.Context, *connect_go.Request[v1.ReleaseMultiRequest]) (*connect_go.Response[v1.ReleaseMultiResponse], error) {
+	return nil, connect_go.NewError(connect_go.CodeUnimplemented, errors.New("internal.proto.resource_map.v1.ResourceMapService.ReleaseMulti is not implemented"))
 }
