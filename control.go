@@ -386,13 +386,14 @@ func (c *acquireController) release(resourceName string, operator logs.CallerCon
 		// If the resource not found, return without error.
 		return nil
 	}
+	op := operator.String()
 	r := v.(*resource)
-	if released := r.ctl.Release(operator.String()); !released {
+	if !r.ctl.Acquired(op) {
 		// If not acquired, return without error.
 		return nil
 	}
 
-	return c._kv.Put([]string{resourceName}, func(_ string, r *logsv1.AcquisitionRecord, _ bool) {
+	err := c._kv.Put([]string{resourceName}, func(_ string, r *logsv1.AcquisitionRecord, _ bool) {
 		r.Logs = append(r.Logs, &logsv1.AcquisitionLog{
 			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 			N:         0,
@@ -400,6 +401,12 @@ func (c *acquireController) release(resourceName string, operator logs.CallerCon
 			Timestamp: time.Now().UnixNano(),
 		})
 	})
+	if err != nil {
+		return err
+	}
+
+	r.ctl.Release(op)
+	return nil
 }
 
 func (c *acquireController) releaseMulti(resources []*resource_mapv1.ReleaseMultiEntry) error {
@@ -419,12 +426,19 @@ func (c *acquireController) releaseMulti(resources []*resource_mapv1.ReleaseMult
 			continue
 		}
 		r := v.(*resource)
-		if released := r.ctl.Release(logs.CallerContext(entry.Context).String()); released {
-			entries[entry.ResourceName] = entry
-			identifiers = append(identifiers, entry.ResourceName)
+		op := logs.CallerContext(entry.Context).String()
+		if !r.ctl.Acquired(op) {
+			// If not acquired, skip it.
+			continue
 		}
+		entries[entry.ResourceName] = entry
+		identifiers = append(identifiers, entry.ResourceName)
+
+		// Release after log write.
+		defer r.ctl.Release(op)
 	}
 
+	ts := time.Now().UnixNano()
 	return c._kv.Put(identifiers, func(identifier string, r *logsv1.AcquisitionRecord, _ bool) {
 		e := entries[identifier]
 
@@ -432,7 +446,7 @@ func (c *acquireController) releaseMulti(resources []*resource_mapv1.ReleaseMult
 			Event:     logsv1.AcquisitionEvent_ACQUISITION_EVENT_RELEASED,
 			N:         0,
 			Context:   e.Context,
-			Timestamp: time.Now().UnixNano(),
+			Timestamp: ts,
 		})
 	})
 }

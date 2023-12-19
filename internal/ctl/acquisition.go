@@ -38,6 +38,14 @@ func NewAcquisitionCtl(max int64, acquired map[string]int64) *AcquisitionCtl {
 	}
 }
 
+func (c *AcquisitionCtl) Acquired(operator string) bool {
+	c._m.Lock()
+	defer c._m.Unlock()
+
+	_, ok := c._acquired[operator]
+	return ok
+}
+
 // Acquire acquires exclusive/shared lock.
 func (c *AcquisitionCtl) Acquire(ctx context.Context, operator string, exclusive bool) (<-chan AcquisitionResult, bool) {
 	c._m.Lock()
