@@ -415,8 +415,8 @@ func (c *acquireController) releaseMulti(resources []*resource_mapv1.ReleaseMult
 	for _, entry := range resources {
 		v, found := c._resources.Load(entry.ResourceName)
 		if !found {
-			// If the resource not found, return without error.
-			return nil
+			// If the resource not found, skip it.
+			continue
 		}
 		r := v.(*resource)
 		if released := r.ctl.Release(logs.CallerContext(entry.Context).String()); released {

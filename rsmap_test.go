@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/lestrrat-go/backoff/v2"
+	"github.com/rs/xid"
+	"golang.org/x/sync/errgroup"
 	"gotest.tools/v3/assert"
 )
 
@@ -306,7 +308,7 @@ func TestMap_Resource(t *testing.T) {
 	})
 }
 
-func TestLockMultipleResources_Deadlock(t *testing.T) {
+func TestLockResources_Deadlock(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -374,4 +376,91 @@ func TestLockMultipleResources_Deadlock(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+func TestLockResources(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	testFunc := func(fn func(ctx context.Context, treasure, precious *Resource) error) func(context.Context) error {
+		ctx := context.Background()
+		m, err := New(dir)
+		assert.NilError(t, err)
+		t.Cleanup(m.Close)
+
+		treasure, err := m.Resource(ctx, "treasure")
+		assert.NilError(t, err)
+		precious, err := m.Resource(ctx, "precious")
+		assert.NilError(t, err)
+
+		return func(ctx context.Context) error {
+			return fn(ctx, treasure, precious)
+		}
+	}
+
+	// Resources as easy race detector.
+	treasureData := map[string]bool{}
+	preciousData := map[string]bool{}
+
+	// Pseudo test function "TestA" and "TestB".
+	// Both test uses "treasure" and "precious", but use Lock() in different order.
+	// Ensure that deadlock never occurs.
+	TestA := testFunc(func(ctx context.Context, treasure, precious *Resource) error {
+		unlock, err := LockResources(ctx,
+			treasure.Exclusive(),
+			precious.Exclusive(),
+		)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 5; i++ {
+			time.Sleep(time.Millisecond)
+			treasureData[xid.New().String()] = true
+			preciousData[xid.New().String()] = true
+		}
+		return unlock()
+	})
+
+	// TestB
+	TestB := testFunc(func(ctx context.Context, treasure, precious *Resource) error {
+		unlock, err := LockResources(ctx,
+			precious.Exclusive(),
+			treasure.Exclusive(),
+		)
+		if err != nil {
+			return err
+		}
+		for i := 0; i < 5; i++ {
+			time.Sleep(time.Millisecond)
+			preciousData[xid.New().String()] = true
+			treasureData[xid.New().String()] = true
+		}
+		return unlock()
+	})
+
+	ctx, cancel := context.WithTimeout(background, time.Second*100)
+	defer cancel()
+
+	var eg errgroup.Group
+	eg.Go(func() error {
+		for i := 0; i < 20; i++ {
+			err := TestA(ctx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	eg.Go(func() error {
+		for i := 0; i < 20; i++ {
+			err := TestB(ctx)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	assert.NilError(t, eg.Wait())
 }
