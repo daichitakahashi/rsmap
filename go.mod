@@ -13,7 +13,7 @@ require (
 	github.com/rodaine/table v1.1.1
 	github.com/rs/xid v1.5.0
 	github.com/spf13/pflag v1.0.5
-	go.etcd.io/bbolt v1.3.8
+	go.etcd.io/bbolt v1.3.9
 	golang.org/x/mod v0.15.0
 	golang.org/x/sync v0.6.0
 	google.golang.org/protobuf v1.32.0
