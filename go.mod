@@ -16,7 +16,7 @@ require (
 	go.etcd.io/bbolt v1.3.9
 	golang.org/x/mod v0.16.0
 	golang.org/x/sync v0.6.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.33.0
 	gotest.tools/v3 v3.5.1
 )
 
