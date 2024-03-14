@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.0.5](https://github.com/daichitakahashi/rsmap/compare/v0.0.4...v0.0.5) - 2024-03-14
+- Upgrade: bump google.golang.org/protobuf from 1.31.0 to 1.32.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/53
+- Upgrade: bump golang.org/x/sync from 0.5.0 to 0.6.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/55
+- Upgrade: bump github.com/rodaine/table from 1.1.0 to 1.1.1 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/56
+- Upgrade: bump golang.org/x/mod from 0.14.0 to 0.15.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/57
+- Upgrade: bump go.etcd.io/bbolt from 1.3.8 to 1.3.9 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/58
+- Upgrade: bump golang.org/x/mod from 0.15.0 to 0.16.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/59
+- Upgrade: bump google.golang.org/protobuf from 1.32.0 to 1.33.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/60
+
 ## [v0.0.4](https://github.com/daichitakahashi/rsmap/compare/v0.0.3...v0.0.4) - 2023-12-19
 - Implement multiple resource lock by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/50
 
