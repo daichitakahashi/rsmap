@@ -6,7 +6,7 @@ require (
 	github.com/bufbuild/connect-go v1.10.0
 	github.com/daichitakahashi/deps v0.0.4
 	github.com/daichitakahashi/oncewait v1.0.0
-	github.com/fatih/color v1.16.0
+	github.com/fatih/color v1.17.0
 	github.com/google/go-cmp v0.6.0
 	github.com/lestrrat-go/backoff/v2 v2.0.8
 	github.com/lestrrat-go/option v1.0.1
@@ -23,5 +23,5 @@ require (
 require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	golang.org/x/sys v0.14.0 // indirect
+	golang.org/x/sys v0.18.0 // indirect
 )
