@@ -14,7 +14,7 @@ require (
 	github.com/rs/xid v1.5.0
 	github.com/spf13/pflag v1.0.5
 	go.etcd.io/bbolt v1.3.10
-	golang.org/x/mod v0.18.0
+	golang.org/x/mod v0.19.0
 	golang.org/x/sync v0.7.0
 	google.golang.org/protobuf v1.34.2
 	gotest.tools/v3 v3.5.1
