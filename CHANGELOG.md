@@ -1,5 +1,27 @@
 # Changelog
 
+## [v0.0.5](https://github.com/daichitakahashi/rsmap/compare/v0.0.4...v0.0.5) - 2024-08-05
+- Upgrade: bump google.golang.org/protobuf from 1.31.0 to 1.32.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/53
+- Upgrade: bump golang.org/x/sync from 0.5.0 to 0.6.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/55
+- Upgrade: bump github.com/rodaine/table from 1.1.0 to 1.1.1 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/56
+- Upgrade: bump golang.org/x/mod from 0.14.0 to 0.15.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/57
+- Upgrade: bump go.etcd.io/bbolt from 1.3.8 to 1.3.9 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/58
+- Upgrade: bump golang.org/x/mod from 0.15.0 to 0.16.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/59
+- Upgrade: bump google.golang.org/protobuf from 1.32.0 to 1.33.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/60
+- Upgrade: bump github.com/rodaine/table from 1.1.1 to 1.2.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/61
+- Upgrade: bump golang.org/x/mod from 0.16.0 to 0.17.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/63
+- Upgrade: bump golang.org/x/sync from 0.6.0 to 0.7.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/62
+- Upgrade: bump google.golang.org/protobuf from 1.33.0 to 1.34.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/64
+- Upgrade: bump go.etcd.io/bbolt from 1.3.9 to 1.3.10 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/65
+- Upgrade: bump google.golang.org/protobuf from 1.34.0 to 1.34.1 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/66
+- Upgrade: bump github.com/fatih/color from 1.16.0 to 1.17.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/67
+- Upgrade: bump golang.org/x/mod from 0.17.0 to 0.18.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/68
+- Upgrade: bump google.golang.org/protobuf from 1.34.1 to 1.34.2 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/69
+- Upgrade: bump golang.org/x/mod from 0.18.0 to 0.19.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/70
+- Upgrade: bump golang.org/x/mod from 0.19.0 to 0.20.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/71
+- Upgrade: bump golang.org/x/sync from 0.7.0 to 0.8.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/72
+- Upgrade: bump github.com/rodaine/table from 1.2.0 to 1.3.0 by @dependabot in https://github.com/daichitakahashi/rsmap/pull/73
+
 ## [v0.0.4](https://github.com/daichitakahashi/rsmap/compare/v0.0.3...v0.0.4) - 2023-12-19
 - Implement multiple resource lock by @daichitakahashi in https://github.com/daichitakahashi/rsmap/pull/50
 
